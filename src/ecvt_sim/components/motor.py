@@ -3,14 +3,47 @@
 Motor characteristics:
 - Constant torque region: 0 to base speed
 - Constant power region: base speed to max speed
+- Variable efficiency based on speed and torque (efficiency map)
 
 MG1 (Sun gear via 3.5:1): 250 kW cont / 450 kW peak, 3,500 N·m max
 MG2 (Ring shaft direct): 500 kW, 5,400 N·m max
+
+Efficiency model based on loss separation:
+- Copper losses (I²R): Proportional to torque²
+- Iron losses: Proportional to speed² (eddy) + speed (hysteresis)
+- Mechanical losses: Proportional to speed (friction, windage)
+- Fixed losses: Constant (auxiliary systems)
+
+References:
+- Losses in Efficiency Maps of Electric Vehicles, Energies 2021
+- Permanent magnet motor efficiency map calculation, ResearchGate
 """
 
 import numpy as np
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Callable
+from scipy.interpolate import RegularGridInterpolator
+
+
+@dataclass
+class MotorLossParams:
+    """Parameters for physics-based motor loss model.
+
+    Loss model: P_loss = P_cu + P_iron + P_mech + P_fixed
+    - P_cu = k_cu * T² (copper losses, quadratic with torque)
+    - P_iron = k_iron_e * ω² + k_iron_h * ω (iron losses)
+    - P_mech = k_mech * ω (mechanical friction/windage)
+    - P_fixed = constant (fixed losses)
+
+    Efficiency: η = P_mech / (P_mech + P_loss) for motoring
+                η = P_elec / (P_elec + P_loss) for generating
+    """
+    k_cu: float = 0.0015        # Copper loss coefficient [W/(N·m)²]
+    k_iron_e: float = 0.5       # Iron loss (eddy current) [W/(rad/s)²]
+    k_iron_h: float = 5.0       # Iron loss (hysteresis) [W/(rad/s)]
+    k_mech: float = 2.0         # Mechanical loss [W/(rad/s)]
+    P_fixed: float = 500.0      # Fixed losses [W]
+    eta_inverter: float = 0.98  # Inverter efficiency
 
 
 @dataclass
@@ -23,7 +56,15 @@ class MotorParams:
     rpm_max: float = 6_000.0    # Maximum speed [rpm]
     rpm_base: float = None      # Base speed [rpm] (computed if None)
     J_rotor: float = 2.0        # Rotor inertia [kg·m²]
-    eta: float = 0.92           # Efficiency (motoring and generating)
+    eta: float = 0.92           # Default constant efficiency (fallback)
+
+    # Efficiency map options
+    use_efficiency_map: bool = True  # Use variable efficiency model
+    loss_params: MotorLossParams = field(default_factory=MotorLossParams)
+
+    # Optional: custom efficiency map data for interpolation
+    # Format: (rpm_points, torque_points, efficiency_grid)
+    efficiency_map_data: Optional[tuple] = None
 
     def __post_init__(self):
         # Compute base speed if not provided
@@ -39,6 +80,10 @@ class Motor:
     Operates in two regions:
     1. Constant torque (0 to base speed): T = T_max
     2. Constant power (base speed to max speed): T = P_max / ω
+
+    Efficiency can be:
+    - Constant (legacy mode): Single η value for all operating points
+    - Variable (efficiency map): Physics-based loss model or interpolated map
     """
 
     def __init__(self, params: MotorParams = None, name: str = "Motor"):
@@ -47,6 +92,15 @@ class Motor:
         self._omega_base = self.params.rpm_base * np.pi / 30.0
         self._omega_max = self.params.rpm_max * np.pi / 30.0
 
+        # Build efficiency map interpolator if custom data provided
+        self._efficiency_interpolator = None
+        if self.params.efficiency_map_data is not None:
+            rpm_pts, torque_pts, eta_grid = self.params.efficiency_map_data
+            self._efficiency_interpolator = RegularGridInterpolator(
+                (rpm_pts, torque_pts), eta_grid,
+                method='linear', bounds_error=False, fill_value=None
+            )
+
     @property
     def J(self) -> float:
         """Rotor inertia [kg·m²]."""
@@ -54,7 +108,7 @@ class Motor:
 
     @property
     def eta(self) -> float:
-        """Motor efficiency."""
+        """Motor nominal/default efficiency."""
         return self.params.eta
 
     def rpm_to_rads(self, rpm: float) -> float:
@@ -122,12 +176,84 @@ class Motor:
         T_max = self.get_max_torque(rpm, use_boost)
         return (-T_max, T_max)
 
+    def get_losses(self, torque: float, omega: float) -> float:
+        """Calculate motor losses using physics-based loss model.
+
+        Loss model: P_loss = P_cu + P_iron + P_mech + P_fixed
+        - P_cu = k_cu * T² (copper losses)
+        - P_iron = k_iron_e * ω² + k_iron_h * |ω| (iron losses)
+        - P_mech = k_mech * |ω| (mechanical losses)
+        - P_fixed = constant
+
+        Args:
+            torque: Motor torque [N·m]
+            omega: Motor angular velocity [rad/s]
+
+        Returns:
+            Total losses [W]
+        """
+        lp = self.params.loss_params
+        omega_abs = abs(omega)
+        torque_abs = abs(torque)
+
+        P_cu = lp.k_cu * torque_abs ** 2
+        P_iron = lp.k_iron_e * omega_abs ** 2 + lp.k_iron_h * omega_abs
+        P_mech = lp.k_mech * omega_abs
+        P_fixed = lp.P_fixed
+
+        return P_cu + P_iron + P_mech + P_fixed
+
+    def get_efficiency(self, torque: float, omega: float) -> float:
+        """Get motor efficiency at given operating point.
+
+        Uses one of three methods:
+        1. Custom efficiency map interpolation (if provided)
+        2. Physics-based loss model (if use_efficiency_map=True)
+        3. Constant efficiency (fallback)
+
+        Args:
+            torque: Motor torque [N·m]
+            omega: Motor angular velocity [rad/s]
+
+        Returns:
+            Efficiency [0-1]
+        """
+        # Method 1: Custom efficiency map interpolation
+        if self._efficiency_interpolator is not None:
+            rpm = self.rads_to_rpm(abs(omega))
+            torque_abs = abs(torque)
+            eta = self._efficiency_interpolator([[rpm, torque_abs]])[0]
+            if eta is not None and not np.isnan(eta):
+                return float(np.clip(eta, 0.5, 0.98))
+
+        # Method 2: Physics-based loss model
+        if self.params.use_efficiency_map:
+            P_mech = abs(torque * omega)
+            if P_mech < 100:  # Very low power, efficiency undefined
+                return self.params.eta
+
+            P_loss = self.get_losses(torque, omega)
+
+            # Include inverter efficiency
+            eta_inv = self.params.loss_params.eta_inverter
+
+            # Efficiency = output / input
+            eta = P_mech / (P_mech + P_loss) * eta_inv
+
+            # Clamp to reasonable range
+            return float(np.clip(eta, 0.5, 0.98))
+
+        # Method 3: Constant efficiency fallback
+        return self.params.eta
+
     def get_electrical_power(self, torque: float, omega: float) -> float:
         """Calculate electrical power consumed/generated.
 
         Sign convention:
         - Positive power: consuming from battery (motoring)
         - Negative power: supplying to battery (generating)
+
+        Uses variable efficiency model if enabled, otherwise constant η.
 
         Args:
             torque: Motor torque [N·m]
@@ -138,12 +264,15 @@ class Motor:
         """
         P_mech = torque * omega
 
+        # Get efficiency at this operating point
+        eta = self.get_efficiency(torque, omega)
+
         if P_mech > 0:
             # Motoring: electrical power = mechanical / efficiency
-            return P_mech / self.params.eta
+            return P_mech / eta
         else:
             # Generating: electrical power = mechanical * efficiency
-            return P_mech * self.params.eta
+            return P_mech * eta
 
     def clip_torque(self, rpm: float, torque_cmd: float, use_boost: bool = False) -> float:
         """Clip torque command to valid range.
@@ -173,6 +302,27 @@ class Motor:
         return T_min <= torque <= T_max
 
 
+# Loss parameters tuned for large industrial motors (200-500 kW class)
+# These give ~92% peak efficiency with realistic variation across the map
+MG1_LOSS_PARAMS = MotorLossParams(
+    k_cu=0.0012,          # Copper loss coefficient [W/(N·m)²]
+    k_iron_e=0.3,         # Iron loss (eddy current) [W/(rad/s)²]
+    k_iron_h=8.0,         # Iron loss (hysteresis) [W/(rad/s)]
+    k_mech=3.0,           # Mechanical loss [W/(rad/s)]
+    P_fixed=800.0,        # Fixed losses [W]
+    eta_inverter=0.98,    # Inverter efficiency
+)
+
+MG2_LOSS_PARAMS = MotorLossParams(
+    k_cu=0.0008,          # Lower copper loss (larger motor, lower resistance)
+    k_iron_e=0.4,         # Iron loss (eddy current) [W/(rad/s)²]
+    k_iron_h=10.0,        # Iron loss (hysteresis) [W/(rad/s)]
+    k_mech=4.0,           # Mechanical loss [W/(rad/s)]
+    P_fixed=1200.0,       # Fixed losses [W]
+    eta_inverter=0.98,    # Inverter efficiency
+)
+
+
 # Pre-configured motor instances for CAT 793D
 MG1_PARAMS = MotorParams(
     P_max=250_000.0,      # 250 kW continuous
@@ -180,7 +330,9 @@ MG1_PARAMS = MotorParams(
     T_max=3_500.0,        # 3,500 N·m max
     rpm_max=6_000.0,      # 6,000 rpm
     J_rotor=2.0,          # 2.0 kg·m²
-    eta=0.92,
+    eta=0.92,             # Fallback constant efficiency
+    use_efficiency_map=True,
+    loss_params=MG1_LOSS_PARAMS,
 )
 
 MG2_PARAMS = MotorParams(
@@ -189,7 +341,9 @@ MG2_PARAMS = MotorParams(
     T_max=5_400.0,        # 5,400 N·m (direct drive on ring shaft)
     rpm_max=4_000.0,      # 4,000 rpm
     J_rotor=4.0,          # 4.0 kg·m²
-    eta=0.92,
+    eta=0.92,             # Fallback constant efficiency
+    use_efficiency_map=True,
+    loss_params=MG2_LOSS_PARAMS,
 )
 
 

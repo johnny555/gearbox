@@ -1,14 +1,17 @@
 """Vehicle model with road load calculations.
 
 CAT 793D Mining Haul Truck specifications:
-- Empty mass: 159,350 kg
-- Payload capacity: 190,000 kg
-- Gross vehicle mass: 349,350 kg (fully loaded)
+- Empty mass: 165,600 kg (365,000 lb)
+- Payload capacity: 218,000 kg (480,500 lb) - rated payload
+- Gross vehicle mass: 383,600 kg (845,600 lb)
 - Wheel radius (59/80R63 tires): 1.78 m
 - Frontal area: 45.0 m²
 - Drag coefficient: 0.9
-- Rolling resistance (haul road): 0.025
-- Max vehicle speed: 54.2 km/h
+- Rolling resistance (haul road): 0.02-0.03 depending on conditions
+- Max vehicle speed: 54.2 km/h (33.7 mph)
+
+Note: Values from CAT 793D specification sheet.
+Payload varies by body configuration (standard, coal, etc.)
 """
 
 import numpy as np
@@ -19,10 +22,10 @@ from dataclasses import dataclass
 class VehicleParams:
     """Vehicle parameters."""
 
-    # Mass
-    m_empty: float = 159_350.0      # Empty mass [kg]
-    m_payload: float = 190_000.0    # Payload capacity [kg]
-    m_gross: float = 349_350.0      # Gross vehicle mass [kg]
+    # Mass (from CAT 793D specs)
+    m_empty: float = 165_600.0      # Empty mass [kg] (365,000 lb)
+    m_payload: float = 218_000.0    # Payload capacity [kg] (480,500 lb)
+    m_gross: float = 383_600.0      # Gross vehicle mass [kg] (845,600 lb)
 
     # Dimensions
     r_wheel: float = 1.78           # Wheel radius [m] (59/80R63 tires)

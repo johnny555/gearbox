@@ -5,15 +5,21 @@ CAT 793D E-CVT configuration:
 - Final drive: Kf=16.0
 - Total low gear: 80:1
 - Total high gear: 10.7:1
-- Gearbox efficiency: 97%
-- Final drive efficiency: 96%
+- Gearbox efficiency: 97% nominal (varies with speed/load)
+- Final drive efficiency: 96% nominal
+
+Variable efficiency model:
+- Baseline mesh efficiency: ~98-99% per gear stage
+- Speed-dependent losses: churning, windage (increase with speed)
+- Load-dependent losses: mesh friction (proportional to torque)
+- Fixed losses: bearings, seals
 
 Note: Deep final drive ratio needed due to large wheel radius (1.78m).
 With locked sun gear, this provides 10% grade capability loaded.
 """
 
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 
 
@@ -25,19 +31,38 @@ class Gear(IntEnum):
 
 
 @dataclass
+class GearboxEfficiencyParams:
+    """Parameters for variable gearbox efficiency model.
+
+    Efficiency model: η = η_base - speed_losses - load_losses
+    - Speed losses: k_speed * ω² (churning, windage)
+    - Load losses: k_load * T / T_rated (mesh friction)
+    """
+    eta_base: float = 0.99          # Baseline mesh efficiency
+    k_speed: float = 1e-8           # Speed loss coefficient [1/(rad/s)²]
+    k_load: float = 0.03            # Load loss coefficient
+    P_fixed: float = 500.0          # Fixed power loss [W]
+    T_rated: float = 50000.0        # Rated torque for load normalization [N·m]
+
+
+@dataclass
 class GearboxParams:
     """Gearbox and final drive parameters."""
 
     K_low: float = 5.0          # Low gear ratio (deep for grade climbing)
     K_high: float = 0.67        # High gear ratio (overdrive)
     K_final: float = 16.0       # Final drive ratio
-    eta_gearbox: float = 0.97   # Gearbox efficiency
+    eta_gearbox: float = 0.97   # Nominal gearbox efficiency (fallback)
     eta_final: float = 0.96     # Final drive efficiency
     J_gearbox: float = 5.0      # Gearbox inertia [kg·m²]
 
+    # Variable efficiency parameters
+    use_variable_efficiency: bool = True
+    efficiency_params: GearboxEfficiencyParams = field(default_factory=GearboxEfficiencyParams)
+
     @property
     def eta_total(self) -> float:
-        """Total drivetrain efficiency."""
+        """Total nominal drivetrain efficiency."""
         return self.eta_gearbox * self.eta_final
 
 
@@ -48,6 +73,8 @@ class Gearbox:
 
     Speed relationship: ω_ring = ω_wheel * K_gear * K_final
     Torque relationship: T_wheel = T_ring * K_gear * K_final * η
+
+    Efficiency varies with speed and load when variable model is enabled.
     """
 
     def __init__(self, params: GearboxParams = None):
@@ -79,8 +106,51 @@ class Gearbox:
 
     @property
     def eta(self) -> float:
-        """Total efficiency."""
+        """Total nominal efficiency."""
         return self.params.eta_total
+
+    def get_efficiency(self, omega_input: float = 0.0, torque: float = 0.0) -> float:
+        """Get gearbox efficiency at given operating point.
+
+        Efficiency varies with speed (churning losses) and load (mesh losses).
+
+        Args:
+            omega_input: Input (ring gear) angular velocity [rad/s]
+            torque: Torque [N·m]
+
+        Returns:
+            Gearbox efficiency [0-1]
+        """
+        if not self.params.use_variable_efficiency:
+            return self.params.eta_gearbox
+
+        ep = self.params.efficiency_params
+
+        # Speed-dependent losses (churning, windage)
+        speed_loss = ep.k_speed * omega_input ** 2
+
+        # Load-dependent losses (mesh friction)
+        load_fraction = abs(torque) / ep.T_rated if ep.T_rated > 0 else 0
+        load_loss = ep.k_load * load_fraction
+
+        # Total efficiency
+        eta = ep.eta_base - speed_loss - load_loss
+
+        # Clamp to reasonable range
+        return float(np.clip(eta, 0.85, 0.995))
+
+    def get_total_efficiency(self, omega_input: float = 0.0, torque: float = 0.0) -> float:
+        """Get total drivetrain efficiency (gearbox × final drive).
+
+        Args:
+            omega_input: Input angular velocity [rad/s]
+            torque: Torque [N·m]
+
+        Returns:
+            Total efficiency [0-1]
+        """
+        eta_gb = self.get_efficiency(omega_input, torque)
+        return eta_gb * self.params.eta_final
 
     def get_gear_ratio(self, gear: Gear | int = None) -> float:
         """Get gear ratio for specified gear.

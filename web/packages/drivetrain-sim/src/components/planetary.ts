@@ -20,8 +20,12 @@ export interface PlanetaryGearParams {
   jCarrier?: number;
   /** Ring gear inertia [kg*m^2] */
   jRing?: number;
-  /** Efficiency (mesh losses) */
-  eta?: number;
+  /** Sun-planet mesh efficiency (~98-99%) */
+  etaSunPlanet?: number;
+  /** Planet-ring mesh efficiency (~98-99%) */
+  etaPlanetRing?: number;
+  /** Enable efficiency losses */
+  useEfficiency?: boolean;
 }
 
 /** CAT 793D planetary gear (ρ = 3.0) */
@@ -31,6 +35,9 @@ export const CAT_793D_PLANETARY_PARAMS: PlanetaryGearParams = {
   jSun: 0.5,
   jCarrier: 1.0,
   jRing: 0.5,
+  etaSunPlanet: 0.98,
+  etaPlanetRing: 0.98,
+  useEfficiency: true,
 };
 
 /**
@@ -58,7 +65,9 @@ export class PlanetaryGearComponent extends DrivetrainComponent {
       jSun: params.jSun ?? 0.5,
       jCarrier: params.jCarrier ?? 1.0,
       jRing: params.jRing ?? 0.5,
-      eta: params.eta ?? 0.98,
+      etaSunPlanet: params.etaSunPlanet ?? 0.98,
+      etaPlanetRing: params.etaPlanetRing ?? 0.98,
+      useEfficiency: params.useEfficiency ?? true,
     };
 
     this._rho = this.params.zRing / this.params.zSun;
@@ -67,6 +76,14 @@ export class PlanetaryGearComponent extends DrivetrainComponent {
   /** Planetary ratio ρ = Z_ring / Z_sun. */
   get rho(): number {
     return this._rho;
+  }
+
+  /** Total mesh efficiency (sun-planet × planet-ring). */
+  get eta(): number {
+    if (!this.params.useEfficiency) {
+      return 1.0;
+    }
+    return this.params.etaSunPlanet * this.params.etaPlanetRing;
   }
 
   get ports(): Record<string, Port> {
@@ -157,11 +174,21 @@ export class PlanetaryGearComponent extends DrivetrainComponent {
    * Calculate sun and ring torques from carrier torque.
    *
    * Based on torque ratios 1 : -(1+ρ) : ρ
+   * With efficiency losses applied to ring torque.
+   *
+   * @param tCarrier - Carrier (engine) torque [N*m]
+   * @param includeEfficiency - Override efficiency setting
+   * @returns [tSun, tRing] - Sun and ring torques [N*m]
    */
-  calcTorqueSplit(tCarrier: number): [number, number] {
+  calcTorqueSplit(tCarrier: number, includeEfficiency?: boolean): [number, number] {
     // From T_carrier and ratio τ_carrier = -(1+ρ)
     const tSun = -tCarrier / (1 + this._rho);
-    const tRing = tSun * this._rho;
+    const tRingIdeal = tSun * this._rho;
+
+    // Apply efficiency if enabled
+    const useEta = includeEfficiency ?? this.params.useEfficiency;
+    const tRing = useEta ? tRingIdeal * this.eta : tRingIdeal;
+
     return [tSun, tRing];
   }
 

@@ -32,10 +32,17 @@ export interface VehicleParams {
   g?: number;
 }
 
-/** Default CAT 793D vehicle parameters */
+/** Default CAT 793D vehicle parameters
+ *
+ * Specifications:
+ * - Empty weight: 165,600 kg (365,000 lb)
+ * - Payload capacity: 218,000 kg (480,000 lb)
+ * - Gross vehicle weight: 383,600 kg (846,000 lb)
+ * - Tire size: 46/90R57 (1.78m rolling radius)
+ */
 export const CAT_793D_PARAMS: VehicleParams = {
-  mEmpty: 159_350,
-  mPayload: 190_000,
+  mEmpty: 165_600,
+  mPayload: 218_000,
   rWheel: 1.78,
   aFrontal: 45.0,
   cD: 0.9,
@@ -81,10 +88,10 @@ export class VehicleComponent extends DrivetrainComponent {
   ) {
     super(name);
 
-    // Merge with defaults
+    // Merge with defaults (CAT 793D specs)
     this.params = {
-      mEmpty: params.mEmpty ?? 159_350,
-      mPayload: params.mPayload ?? 190_000,
+      mEmpty: params.mEmpty ?? 165_600,
+      mPayload: params.mPayload ?? 218_000,
       rWheel: params.rWheel ?? 1.78,
       aFrontal: params.aFrontal ?? 45.0,
       cD: params.cD ?? 0.9,

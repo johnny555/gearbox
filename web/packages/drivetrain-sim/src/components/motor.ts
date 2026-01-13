@@ -1,10 +1,37 @@
 /**
  * Electric motor/generator component for drivetrain simulation.
+ *
+ * Features variable efficiency model based on speed and torque:
+ * - Loss model: P_loss = P_cu + P_iron + P_mech + P_fixed
+ * - Copper losses (I²R): Proportional to torque²
+ * - Iron losses: Speed-dependent (eddy + hysteresis)
+ * - Mechanical losses: Friction, windage
+ *
+ * References:
+ * - Losses in Efficiency Maps of Electric Vehicles, Energies 2021
  */
 
 import { DrivetrainComponent, PortValues } from '../core/component';
 import { Port, PortDirection, PortType } from '../core/ports';
 import { KinematicConstraint } from '../core/constraints';
+
+/**
+ * Motor loss model parameters for variable efficiency.
+ */
+export interface MotorLossParams {
+  /** Copper loss coefficient [W/(N*m)²] */
+  kCu?: number;
+  /** Iron loss (eddy current) [W/(rad/s)²] */
+  kIronE?: number;
+  /** Iron loss (hysteresis) [W/(rad/s)] */
+  kIronH?: number;
+  /** Mechanical loss [W/(rad/s)] */
+  kMech?: number;
+  /** Fixed losses [W] */
+  pFixed?: number;
+  /** Inverter efficiency */
+  etaInverter?: number;
+}
 
 /**
  * Motor parameters.
@@ -22,27 +49,60 @@ export interface MotorParams {
   rpmBase?: number;
   /** Rotor inertia [kg*m^2] */
   jRotor?: number;
-  /** Efficiency (0-1) for both motoring and generating */
+  /** Nominal efficiency (0-1), used as fallback */
   eta?: number;
+  /** Enable variable efficiency model */
+  useEfficiencyMap?: boolean;
+  /** Loss model parameters */
+  lossParams?: MotorLossParams;
 }
+
+/** Default loss parameters for large industrial motors */
+const DEFAULT_LOSS_PARAMS: Required<MotorLossParams> = {
+  kCu: 0.0012,
+  kIronE: 0.3,
+  kIronH: 8.0,
+  kMech: 3.0,
+  pFixed: 800,
+  etaInverter: 0.98,
+};
 
 /** MG1 motor parameters for CAT 793D */
 export const MG1_PARAMS: MotorParams = {
-  pMax: 200_000, // 200 kW
-  tMax: 3_000, // 3,000 N*m
+  pMax: 250_000, // 250 kW
+  pBoost: 450_000, // 450 kW peak
+  tMax: 3_500, // 3,500 N*m
   rpmMax: 6_000,
   jRotor: 2.0,
   eta: 0.92,
+  useEfficiencyMap: true,
+  lossParams: {
+    kCu: 0.0012,
+    kIronE: 0.3,
+    kIronH: 8.0,
+    kMech: 3.0,
+    pFixed: 800,
+    etaInverter: 0.98,
+  },
 };
 
 /** MG2 motor parameters for CAT 793D */
 export const MG2_PARAMS: MotorParams = {
-  pMax: 350_000, // 350 kW continuous
-  pBoost: 500_000, // 500 kW boost
-  tMax: 2_000, // 2,000 N*m
+  pMax: 500_000, // 500 kW continuous
+  pBoost: 500_000, // 500 kW (no boost)
+  tMax: 5_400, // 5,400 N*m
   rpmMax: 4_000,
   jRotor: 4.0,
   eta: 0.92,
+  useEfficiencyMap: true,
+  lossParams: {
+    kCu: 0.0008,
+    kIronE: 0.4,
+    kIronH: 10.0,
+    kMech: 4.0,
+    pFixed: 1200,
+    etaInverter: 0.98,
+  },
 };
 
 /**
@@ -52,10 +112,14 @@ export const MG2_PARAMS: MotorParams = {
  * - Constant torque (0 to base speed): T = T_max
  * - Constant power (base speed to max speed): T = P_max / ω
  *
+ * Features variable efficiency based on speed and torque when enabled.
  * Can operate in all four quadrants (motoring/generating in both directions).
  */
 export class MotorComponent extends DrivetrainComponent {
-  readonly params: Required<Omit<MotorParams, 'pBoost'>> & { pBoost: number | null };
+  readonly params: Required<Omit<MotorParams, 'pBoost' | 'lossParams'>> & {
+    pBoost: number | null;
+    lossParams: Required<MotorLossParams>;
+  };
   private _omegaBase: number;
   private _omegaMax: number;
 
@@ -76,6 +140,11 @@ export class MotorComponent extends DrivetrainComponent {
       rpmBase: params.rpmBase ?? computedRpmBase,
       jRotor: params.jRotor ?? 2.0,
       eta: params.eta ?? 0.92,
+      useEfficiencyMap: params.useEfficiencyMap ?? true,
+      lossParams: {
+        ...DEFAULT_LOSS_PARAMS,
+        ...params.lossParams,
+      },
     };
 
     this._omegaBase = this.params.rpmBase * Math.PI / 30;
@@ -172,7 +241,53 @@ export class MotorComponent extends DrivetrainComponent {
   }
 
   /**
+   * Calculate motor losses using physics-based loss model.
+   *
+   * P_loss = P_cu + P_iron + P_mech + P_fixed
+   */
+  getLosses(torque: number, omega: number): number {
+    const lp = this.params.lossParams;
+    const omegaAbs = Math.abs(omega);
+    const torqueAbs = Math.abs(torque);
+
+    const pCu = lp.kCu * torqueAbs * torqueAbs;
+    const pIron = lp.kIronE * omegaAbs * omegaAbs + lp.kIronH * omegaAbs;
+    const pMech = lp.kMech * omegaAbs;
+    const pFixed = lp.pFixed;
+
+    return pCu + pIron + pMech + pFixed;
+  }
+
+  /**
+   * Get motor efficiency at given operating point.
+   *
+   * Uses physics-based loss model if enabled, otherwise constant eta.
+   */
+  getEfficiency(torque: number, omega: number): number {
+    if (!this.params.useEfficiencyMap) {
+      return this.params.eta;
+    }
+
+    const pMech = Math.abs(torque * omega);
+    if (pMech < 100) {
+      // Very low power, efficiency undefined
+      return this.params.eta;
+    }
+
+    const pLoss = this.getLosses(torque, omega);
+    const etaInv = this.params.lossParams.etaInverter;
+
+    // Efficiency = output / input
+    let eta = (pMech / (pMech + pLoss)) * etaInv;
+
+    // Clamp to reasonable range
+    return Math.max(0.5, Math.min(0.98, eta));
+  }
+
+  /**
    * Calculate electrical power consumed/generated.
+   *
+   * Uses variable efficiency model if enabled.
    *
    * Sign convention:
    * - Positive power: consuming from battery (motoring)
@@ -180,13 +295,14 @@ export class MotorComponent extends DrivetrainComponent {
    */
   getElectricalPower(torque: number, omega: number): number {
     const pMech = torque * omega;
+    const eta = this.getEfficiency(torque, omega);
 
     if (pMech > 0) {
       // Motoring: electrical power = mechanical / efficiency
-      return pMech / this.params.eta;
+      return pMech / eta;
     } else {
       // Generating: electrical power = mechanical * efficiency
-      return pMech * this.params.eta;
+      return pMech * eta;
     }
   }
 
