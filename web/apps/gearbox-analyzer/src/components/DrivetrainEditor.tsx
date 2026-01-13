@@ -19,6 +19,7 @@ import { ComponentPalette } from "@/components/panels/ComponentPalette";
 import { PropertiesPanel } from "@/components/panels/PropertiesPanel";
 import { SimulationPanel } from "@/components/panels/SimulationPanel";
 import { SimulationView } from "@/components/panels/SimulationView";
+import { ReferencesPanel } from "@/components/panels/ReferencesPanel";
 import { Button } from "@/components/ui/button";
 
 // Custom edge styles
@@ -99,11 +100,14 @@ export function DrivetrainEditor() {
     <div className="h-screen flex flex-col bg-black">
       {/* Header */}
       <header className="h-14 flex items-center justify-between px-4 border-b border-subtle bg-dark">
-        <div className="flex items-center">
-          <h1 className="text-lg font-semibold text-primary">Gearbox Analyzer</h1>
-          <span className="ml-4 text-sm text-muted">
-            Visual Drivetrain Simulation Tool
-          </span>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-lg font-semibold text-primary">Gearbox Analyzer</h1>
+            <span className="text-sm text-muted">
+              Visual Drivetrain Simulation Tool
+            </span>
+          </div>
+          <ReferencesPanel />
         </div>
 
         <Button

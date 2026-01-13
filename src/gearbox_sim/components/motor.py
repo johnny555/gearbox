@@ -57,6 +57,25 @@ MG2_PARAMS = MotorParams(
     eta=0.92,
 )
 
+# Motor parameters for CAT 789D (scaled for smaller truck)
+MG1_789D_PARAMS = MotorParams(
+    P_max=220_000.0,      # 220 kW continuous
+    P_boost=400_000.0,    # 400 kW peak
+    T_max=3_000.0,        # 3,000 N·m max
+    rpm_max=6_000.0,
+    J_rotor=1.8,
+    eta=0.92,
+)
+
+MG2_789D_PARAMS = MotorParams(
+    P_max=430_000.0,      # 430 kW continuous
+    P_boost=430_000.0,    # No boost
+    T_max=4_700.0,        # 4,700 N·m
+    rpm_max=4_000.0,
+    J_rotor=3.5,
+    eta=0.92,
+)
+
 
 class MotorComponent(DrivetrainComponent):
     """Electric motor/generator component.

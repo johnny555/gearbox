@@ -347,6 +347,31 @@ MG2_PARAMS = MotorParams(
 )
 
 
+# Motor parameters for CAT 789D (scaled for smaller truck)
+# 789D is ~77% of 793D GVW, motors scaled accordingly
+MG1_789D_PARAMS = MotorParams(
+    P_max=220_000.0,      # 220 kW continuous
+    P_boost=400_000.0,    # 400 kW peak
+    T_max=3_000.0,        # 3,000 N·m max
+    rpm_max=6_000.0,      # 6,000 rpm
+    J_rotor=1.8,          # Slightly smaller rotor
+    eta=0.92,
+    use_efficiency_map=True,
+    loss_params=MG1_LOSS_PARAMS,
+)
+
+MG2_789D_PARAMS = MotorParams(
+    P_max=430_000.0,      # 430 kW continuous
+    P_boost=430_000.0,    # No boost
+    T_max=4_700.0,        # 4,700 N·m
+    rpm_max=4_000.0,      # 4,000 rpm
+    J_rotor=3.5,
+    eta=0.92,
+    use_efficiency_map=True,
+    loss_params=MG2_LOSS_PARAMS,
+)
+
+
 def create_mg1() -> Motor:
     """Create MG1 motor instance with CAT 793D parameters."""
     return Motor(MG1_PARAMS, name="MG1")
@@ -355,3 +380,13 @@ def create_mg1() -> Motor:
 def create_mg2() -> Motor:
     """Create MG2 motor instance with CAT 793D parameters."""
     return Motor(MG2_PARAMS, name="MG2")
+
+
+def create_mg1_789d() -> Motor:
+    """Create MG1 motor instance with CAT 789D parameters."""
+    return Motor(MG1_789D_PARAMS, name="MG1")
+
+
+def create_mg2_789d() -> Motor:
+    """Create MG2 motor instance with CAT 789D parameters."""
+    return Motor(MG2_789D_PARAMS, name="MG2")

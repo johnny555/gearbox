@@ -46,8 +46,32 @@ class EngineParams:
     ])
 
 
-# Pre-configured CAT 3516E parameters
+# Pre-configured CAT 3516E parameters (for 793D)
 CAT_3516E_PARAMS = EngineParams()
+
+# CAT 3516C parameters (for 789D)
+# Specifications:
+# - Gross Power: 1,566 kW (2,100 hp) at 1,750 rpm
+# - Peak Torque: 10,254 N·m (7,563 lb-ft) at 1,300 rpm
+CAT_3516C_PARAMS = EngineParams(
+    rpm_idle=700.0,
+    rpm_min=700.0,
+    rpm_max=1800.0,
+    P_rated=1_566_000.0,
+    rpm_rated=1750.0,
+    T_peak=10_254.0,
+    rpm_peak_torque=1300.0,
+    J_engine=22.0,
+    bsfc=54.2e-9,  # ~195 g/kWh optimal
+    torque_curve=[
+        (700, 8_300),
+        (1000, 9_600),
+        (1300, 10_254),
+        (1500, 9_400),
+        (1750, 8_543),
+        (1800, 8_200),
+    ],
+)
 
 
 class EngineComponent(DrivetrainComponent):

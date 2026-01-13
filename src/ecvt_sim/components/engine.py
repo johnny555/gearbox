@@ -325,5 +325,50 @@ class Engine:
         return 1.0 / (bsfc * LHV_diesel)
 
 
-# Default CAT 3516E engine instance
-CAT_3516E = Engine(EngineParams())
+# CAT 3516E engine parameters (for 793D)
+CAT_3516E_PARAMS = EngineParams(
+    rpm_idle=700.0,
+    rpm_min=700.0,
+    rpm_max=1800.0,
+    P_rated=1_801_000.0,
+    rpm_rated=1650.0,
+    T_peak=11_220.0,
+    rpm_peak_torque=1200.0,
+    J_engine=25.0,
+    torque_curve=[
+        (700, 9_500),
+        (1000, 10_800),
+        (1200, 11_220),
+        (1400, 10_900),
+        (1650, 10_420),
+        (1800, 9_800),
+    ],
+)
+
+# CAT 3516C engine parameters (for 789D)
+# Specifications:
+# - Gross Power: 1,566 kW (2,100 hp) at 1,750 rpm
+# - Peak Torque: 10,254 N·m (7,563 lb-ft) at 1,300 rpm
+# - 23% torque rise for excellent lugging characteristics
+CAT_3516C_PARAMS = EngineParams(
+    rpm_idle=700.0,
+    rpm_min=700.0,
+    rpm_max=1800.0,
+    P_rated=1_566_000.0,  # 1,566 kW
+    rpm_rated=1750.0,
+    T_peak=10_254.0,  # 10,254 N·m
+    rpm_peak_torque=1300.0,
+    J_engine=22.0,  # Slightly smaller than 3516E
+    torque_curve=[
+        (700, 8_300),   # ~81% of peak (typical idle torque)
+        (1000, 9_600),  # Rising to peak
+        (1300, 10_254), # Peak torque
+        (1500, 9_400),  # Dropping in constant power region
+        (1750, 8_543),  # At rated power: P/ω = 1.566e6 / 183.3 rad/s
+        (1800, 8_200),  # Slight drop at max speed
+    ],
+)
+
+# Default engine instances
+CAT_3516E = Engine(CAT_3516E_PARAMS)
+CAT_3516C = Engine(CAT_3516C_PARAMS)

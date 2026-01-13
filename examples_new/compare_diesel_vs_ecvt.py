@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare conventional diesel vs eCVT hybrid 793D drivetrains.
+"""Compare conventional diesel vs eCVT hybrid 789D drivetrains.
 
 This example demonstrates how to use the composable drivetrain simulator
 to compare fuel consumption between different powertrain configurations.
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from gearbox_sim.configs import create_conventional_diesel_793d, create_ecvt_793d
+from gearbox_sim.configs import create_conventional_diesel_793d, create_ecvt_789d
 from gearbox_sim.configs.conventional_diesel import get_initial_state as diesel_init
 from gearbox_sim.configs.ecvt_hybrid import get_initial_state as ecvt_init, ECVTController
 from gearbox_sim.control import ConventionalDieselController
@@ -23,14 +23,14 @@ from gearbox_sim.analysis import compare_drivetrains, create_grade_climb_profile
 
 def main():
     print("=" * 60)
-    print("CAT 793D Drivetrain Comparison: Diesel vs eCVT Hybrid")
+    print("CAT 789D Drivetrain Comparison: Diesel vs eCVT Hybrid")
     print("=" * 60)
     print()
 
     # Create drivetrains
     print("Creating drivetrains...")
-    diesel = create_conventional_diesel_793d(payload_fraction=1.0)
-    ecvt = create_ecvt_793d(payload_fraction=1.0, initial_soc=0.6)
+    diesel = create_conventional_diesel_793d(payload_fraction=1.0)  # TODO: create 789D diesel
+    ecvt = create_ecvt_789d(payload_fraction=1.0, initial_soc=0.6)
 
     print(f"  Diesel: {diesel}")
     print(f"  eCVT:   {ecvt}")
@@ -73,7 +73,7 @@ def main():
     # Run comparison
     configurations = {
         "Diesel 793D": (diesel, diesel_ctrl, diesel_x0),
-        "eCVT 793D": (ecvt, ecvt_ctrl, ecvt_x0),
+        "eCVT 789D": (ecvt, ecvt_ctrl, ecvt_x0),
     }
 
     comparison = compare_drivetrains(
@@ -91,7 +91,7 @@ def main():
 
     # Calculate fuel savings
     diesel_fuel = comparison.metrics["Diesel 793D"]["fuel_total"]
-    ecvt_fuel = comparison.metrics["eCVT 793D"]["fuel_total"]
+    ecvt_fuel = comparison.metrics["eCVT 789D"]["fuel_total"]
 
     if diesel_fuel > 0:
         savings = (diesel_fuel - ecvt_fuel) / diesel_fuel * 100
@@ -102,7 +102,7 @@ def main():
 
     # Battery usage for eCVT
     ecvt_soc_init = ecvt_x0.get("battery.SOC", 0.6)
-    ecvt_soc_final = comparison.metrics["eCVT 793D"]["final_soc"]
+    ecvt_soc_final = comparison.metrics["eCVT 789D"]["final_soc"]
     soc_change = ecvt_soc_final - ecvt_soc_init
     print(f"\neCVT Battery usage:")
     print(f"  Initial SOC: {ecvt_soc_init * 100:.1f}%")
@@ -116,9 +116,9 @@ def main():
 def plot_comparison(comparison):
     """Plot comparison results."""
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-    fig.suptitle("Diesel vs eCVT Hybrid Comparison - 5% Grade Climb")
+    fig.suptitle("CAT 789D: Diesel vs eCVT Hybrid - 5% Grade Climb")
 
-    colors = {"Diesel 793D": "tab:blue", "eCVT 793D": "tab:green"}
+    colors = {"Diesel 793D": "tab:blue", "eCVT 789D": "tab:green"}
 
     # Velocity
     ax = axes[0, 0]
@@ -161,9 +161,9 @@ def plot_comparison(comparison):
 
     # Battery SOC (eCVT only)
     ax = axes[1, 1]
-    ecvt_result = comparison.results.get("eCVT 793D")
+    ecvt_result = comparison.results.get("eCVT 789D")
     if ecvt_result and ecvt_result.soc is not None:
-        ax.plot(ecvt_result.time, ecvt_result.soc * 100, color=colors["eCVT 793D"])
+        ax.plot(ecvt_result.time, ecvt_result.soc * 100, color=colors["eCVT 789D"])
     ax.set_xlabel("Time [s]")
     ax.set_ylabel("Battery SOC [%]")
     ax.set_title("eCVT Battery State of Charge")

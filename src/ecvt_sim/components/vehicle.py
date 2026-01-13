@@ -4,13 +4,21 @@ CAT 793D Mining Haul Truck specifications:
 - Empty mass: 165,600 kg (365,000 lb)
 - Payload capacity: 218,000 kg (480,500 lb) - rated payload
 - Gross vehicle mass: 383,600 kg (845,600 lb)
-- Wheel radius (59/80R63 tires): 1.78 m
+- Wheel radius (46/90R57 tires): 1.78 m
 - Frontal area: 45.0 m²
 - Drag coefficient: 0.9
 - Rolling resistance (haul road): 0.02-0.03 depending on conditions
 - Max vehicle speed: 54.2 km/h (33.7 mph)
 
-Note: Values from CAT 793D specification sheet.
+CAT 789D Mining Haul Truck specifications:
+- Empty mass: 130,000 kg (286,600 lb)
+- Payload capacity: 164,000 kg (181 tons)
+- Gross vehicle mass: 294,000 kg (648,000 lb)
+- Wheel radius (37.00R57 tires): 1.67 m (accounting for load deflection)
+- Frontal area: 40.0 m²
+- Max vehicle speed: 57.2 km/h (35.5 mph)
+
+Note: Values from CAT specification sheets.
 Payload varies by body configuration (standard, coal, etc.)
 """
 
@@ -243,12 +251,51 @@ class Vehicle:
         return self._mass + self.params.J_wheels / self.params.r_wheel ** 2
 
 
+# CAT 793D vehicle parameters (240-ton class)
+CAT_793D_VEHICLE_PARAMS = VehicleParams(
+    m_empty=165_600.0,
+    m_payload=218_000.0,
+    m_gross=383_600.0,
+    r_wheel=1.78,
+    wheelbase=5.92,
+    A_frontal=45.0,
+    C_d=0.9,
+    C_r=0.025,
+    v_max=54.2 / 3.6,
+    J_wheels=500.0,
+)
+
+# CAT 789D vehicle parameters (181-ton class)
+CAT_789D_VEHICLE_PARAMS = VehicleParams(
+    m_empty=130_000.0,      # 130 tonnes empty
+    m_payload=164_000.0,    # 181 tons payload
+    m_gross=294_000.0,      # 294 tonnes GVW
+    r_wheel=1.67,           # 37.00R57 tires (~1.67m rolling radius)
+    wheelbase=5.50,         # Slightly shorter wheelbase
+    A_frontal=40.0,         # Smaller frontal area
+    C_d=0.9,
+    C_r=0.025,
+    v_max=57.2 / 3.6,       # 57.2 km/h max
+    J_wheels=400.0,         # Smaller wheels
+)
+
+
 # Pre-configured vehicles
 def create_empty_793d() -> Vehicle:
     """Create empty CAT 793D vehicle."""
-    return Vehicle(VehicleParams(), payload_fraction=0.0)
+    return Vehicle(CAT_793D_VEHICLE_PARAMS, payload_fraction=0.0)
 
 
 def create_loaded_793d() -> Vehicle:
     """Create fully loaded CAT 793D vehicle."""
-    return Vehicle(VehicleParams(), payload_fraction=1.0)
+    return Vehicle(CAT_793D_VEHICLE_PARAMS, payload_fraction=1.0)
+
+
+def create_empty_789d() -> Vehicle:
+    """Create empty CAT 789D vehicle."""
+    return Vehicle(CAT_789D_VEHICLE_PARAMS, payload_fraction=0.0)
+
+
+def create_loaded_789d() -> Vehicle:
+    """Create fully loaded CAT 789D vehicle."""
+    return Vehicle(CAT_789D_VEHICLE_PARAMS, payload_fraction=1.0)

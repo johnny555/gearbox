@@ -27,8 +27,8 @@ class VehicleParams:
         g: Gravitational acceleration [m/s²]
     """
 
-    m_empty: float = 159_350.0
-    m_payload: float = 190_000.0
+    m_empty: float = 165_600.0
+    m_payload: float = 218_000.0
     r_wheel: float = 1.78
     A_frontal: float = 45.0
     C_d: float = 0.9
@@ -39,7 +39,7 @@ class VehicleParams:
     g: float = 9.81
 
 
-# Pre-configured vehicles
+# Pre-configured CAT 793D vehicles (240-ton class)
 CAT_793D_PARAMS = VehicleParams()
 
 # Good haul road conditions
@@ -47,6 +47,18 @@ CAT_793D_GOOD_ROAD = VehicleParams(C_r=0.015)
 
 # Poor haul road conditions
 CAT_793D_POOR_ROAD = VehicleParams(C_r=0.035)
+
+# CAT 789D vehicle parameters (181-ton class)
+CAT_789D_PARAMS = VehicleParams(
+    m_empty=130_000.0,
+    m_payload=164_000.0,
+    r_wheel=1.67,
+    A_frontal=40.0,
+    C_d=0.9,
+    C_r=0.025,
+    v_max=57.2 / 3.6,
+    J_wheels=400.0,
+)
 
 
 class VehicleComponent(DrivetrainComponent):
