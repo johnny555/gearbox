@@ -123,20 +123,30 @@ export function ComparisonRimpullChart({ results }: ComparisonRimpullChartProps)
 
   const layout: Partial<Plotly.Layout> = {
     autosize: true,
-    margin: { t: 30, r: 30, b: 50, l: 60 },
+    margin: { t: 30, r: 30, b: 60, l: 70 },
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
     font: { color: "#888" },
     xaxis: {
-      title: "Speed (km/h)",
+      title: {
+        text: "Speed (km/h)",
+        font: { color: "#aaa", size: 12 },
+        standoff: 10,
+      },
       gridcolor: "#333",
       zerolinecolor: "#444",
+      tickfont: { color: "#888" },
       range: [0, 60],
     },
     yaxis: {
-      title: "Tractive Force (kN)",
+      title: {
+        text: "Tractive Force (kN)",
+        font: { color: "#aaa", size: 12 },
+        standoff: 10,
+      },
       gridcolor: "#333",
       zerolinecolor: "#444",
+      tickfont: { color: "#888" },
       range: [0, null],
     },
     legend: {

@@ -4,6 +4,7 @@
 
 import { DrivetrainComponent } from './component';
 import { Connection, PortType } from './ports';
+import { Drivetrain } from './drivetrain';
 
 /**
  * Error in drivetrain topology configuration.
@@ -293,14 +294,12 @@ export class DrivetrainTopology {
   /**
    * Compile the topology into a simulatable Drivetrain.
    */
-  build(): import('./drivetrain').Drivetrain {
+  build(): Drivetrain {
     const errors = this.validate();
     if (errors.length > 0) {
       throw new TopologyError('Invalid topology: ' + errors.join('; '));
     }
 
-    // Dynamic import to avoid circular dependency
-    const { Drivetrain } = require('./drivetrain');
     return new Drivetrain(this);
   }
 

@@ -2,7 +2,7 @@
 import { useCallback } from "react";
 import { type Node, type Edge } from "@xyflow/react";
 import type { BaseNodeData } from "@/stores/drivetrain-store";
-import { useSimulationStore, type SimResult, type RimpullCurve, type RimpullPoint } from "@/stores/simulation-store";
+import { useSimulationStore, type SimResult, type RimpullCurve, type RimpullPoint, type OperatingCurve, type OperatingPoint } from "@/stores/simulation-store";
 
 import {
   DrivetrainTopology,
@@ -169,6 +169,14 @@ function buildTopology(
 }
 
 /**
+ * Result of computing drivetrain curves.
+ */
+interface DrivetrainCurves {
+  rimpull: RimpullCurve[];
+  operating: OperatingCurve[];
+}
+
+/**
  * Compute rimpull curves for the drivetrain.
  *
  * Detects topology type and calculates appropriately:
@@ -178,8 +186,9 @@ function buildTopology(
 function computeRimpull(
   nodes: Node<BaseNodeData>[],
   edges: Edge[]
-): RimpullCurve[] {
-  const curves: RimpullCurve[] = [];
+): DrivetrainCurves {
+  const rimpullCurves: RimpullCurve[] = [];
+  const operatingCurves: OperatingCurve[] = [];
 
   // Find key components
   const engineNode = nodes.find((n) => n.data.componentType === "engine");
@@ -189,7 +198,7 @@ function computeRimpull(
   const vehicleNode = nodes.find((n) => n.data.componentType === "vehicle");
 
   if (!vehicleNode) {
-    return curves;
+    return { rimpull: rimpullCurves, operating: operatingCurves };
   }
 
   const vehicleParams = vehicleNode.data.params;
@@ -204,25 +213,27 @@ function computeRimpull(
 
   if (isECVT && engineNode) {
     // eCVT topology: Engine + Planetary + Motors
-    curves.push(...computeECVTRimpull(
-      engineNode, motorNodes, planetaryNode!, gearboxNode, vehicleParams, rWheel
-    ));
+    const result = computeECVTRimpull(
+      engineNode, motorNodes, planetaryNode!, gearboxNode, vehicleParams, rWheel, nodes, edges
+    );
+    rimpullCurves.push(...result.rimpull);
+    operatingCurves.push(...result.operating);
   } else if (engineNode) {
     // Diesel topology: Engine → Gearbox → Vehicle
-    curves.push(...computeDieselRimpull(
+    rimpullCurves.push(...computeDieselRimpull(
       engineNode, gearboxNode, vehicleParams, rWheel
     ));
   } else if (motorNodes.length > 0) {
     // Pure electric: Motor → Gearbox → Vehicle
-    curves.push(...computeElectricRimpull(
+    rimpullCurves.push(...computeElectricRimpull(
       motorNodes, gearboxNode, vehicleParams, rWheel
     ));
   }
 
   // Add resistance curves
-  addResistanceCurves(curves, mTotal, cR);
+  addResistanceCurves(rimpullCurves, mTotal, cR);
 
-  return curves;
+  return { rimpull: rimpullCurves, operating: operatingCurves };
 }
 
 /**
@@ -235,6 +246,7 @@ function computeDieselRimpull(
   rWheel: number
 ): RimpullCurve[] {
   const curves: RimpullCurve[] = [];
+  const engineLabel = engineNode.data.label || "Engine";
   const engineParams = engineNode.data.params;
 
   // Engine parameters
@@ -286,7 +298,7 @@ function computeDieselRimpull(
     }
 
     curves.push({
-      name: `Gear ${g + 1} (${ratio.toFixed(2)}:1)`,
+      name: `Gear ${g + 1}: ${engineLabel} (${ratio.toFixed(2)}:1)`,
       points,
       color: gearColors[g % gearColors.length],
     });
@@ -298,6 +310,8 @@ function computeDieselRimpull(
 /**
  * Compute rimpull for eCVT (power-split hybrid) drivetrain.
  * Uses Willis equation: ω_sun = (1+ρ)·ω_carrier - ρ·ω_ring
+ *
+ * Matches the Python rimpull_detailed.py calculation.
  */
 function computeECVTRimpull(
   engineNode: Node<BaseNodeData>,
@@ -305,15 +319,21 @@ function computeECVTRimpull(
   planetaryNode: Node<BaseNodeData>,
   gearboxNode: Node<BaseNodeData> | undefined,
   vehicleParams: Record<string, unknown>,
-  rWheel: number
-): RimpullCurve[] {
-  const curves: RimpullCurve[] = [];
+  rWheel: number,
+  allNodes?: Node<BaseNodeData>[],
+  allEdges?: Edge[]
+): DrivetrainCurves {
+  const rimpullCurves: RimpullCurve[] = [];
+  const operatingCurves: OperatingCurve[] = [];
+
+  // Get component labels for curve naming
+  const engineLabel = engineNode.data.label || "Engine";
 
   // Engine parameters
   const engineParams = engineNode.data.params;
-  const rpmEngineMin = (engineParams.rpmIdle as number) || 700;
-  const rpmEngineMax = (engineParams.rpmMax as number) || 1800;
+  const rpmEngineOpt = 1200; // Optimal engine speed for max torque
   const tEngineMax = (engineParams.tPeak as number) || 11220;
+  const pEngineRated = (engineParams.pRated as number) || 1801000;
 
   // Planetary ratio: ρ = Z_ring / Z_sun
   const planetaryParams = planetaryNode.data.params;
@@ -322,133 +342,430 @@ function computeECVTRimpull(
   const rho = zRing / zSun; // typically 3.0
 
   // Motor parameters (find MG1 and MG2)
-  // MG1 is typically lower power (reaction motor), MG2 is higher power (traction motor)
+  // MG1 is typically lower continuous power (reaction motor), MG2 is higher power (traction motor)
   const sortedMotors = [...motorNodes].sort((a, b) =>
     ((a.data.params.pMax as number) || 0) - ((b.data.params.pMax as number) || 0)
   );
 
-  const mg1Params = sortedMotors[0]?.data.params || {};
-  const mg2Params = sortedMotors[1]?.data.params || sortedMotors[0]?.data.params || {};
+  const mg1Node = sortedMotors[0];
+  const mg2Node = sortedMotors[1] || sortedMotors[0];
+  const mg1Label = mg1Node?.data.label || "MG1";
+  const mg2Label = mg2Node?.data.label || "MG2";
+  const mg1Params = mg1Node?.data.params || {};
+  const mg2Params = mg2Node?.data.params || {};
 
-  const pMG1Max = (mg1Params.pMax as number) || 200000;
-  const tMG1Max = (mg1Params.tMax as number) || 3000;
+  // MG1 parameters - use pBoost for peak power (matching Python)
+  const pMG1Continuous = (mg1Params.pMax as number) || 250000;
+  const pMG1Peak = (mg1Params.pBoost as number) || pMG1Continuous;
+  const tMG1Max = (mg1Params.tMax as number) || 3500;
   const rpmMG1Max = (mg1Params.rpmMax as number) || 6000;
 
-  const pMG2Max = (mg2Params.pMax as number) || 350000;
-  const tMG2Max = (mg2Params.tMax as number) || 2000;
-  const rpmMG2Max = (mg2Params.rpmMax as number) || 6000;
-  const pMG2Boost = (mg2Params.pBoost as number) || pMG2Max;
+  // MG2 parameters
+  const pMG2Continuous = (mg2Params.pMax as number) || 500000;
+  const tMG2Max = (mg2Params.tMax as number) || 5400;
+  const rpmMG2Max = (mg2Params.rpmMax as number) || 4000;
 
-  // Gearbox ratios (2-speed for eCVT)
-  const gearRatios = gearboxNode
-    ? (gearboxNode.data.params.ratios as number[]) || [5.0, 0.67]
-    : [5.0, 0.67];
-  const gearEfficiencies = gearboxNode
-    ? (gearboxNode.data.params.efficiencies as number[]) || [0.97, 0.97]
-    : [0.97, 0.97];
+  // Find MG1 reduction ratio by looking for a gearbox connected to MG1
+  let kMG1 = 1.0; // MG1 to sun reduction ratio
+  let etaMG1Reduction = 0.97;
+  if (allNodes && allEdges && mg1Node) {
+    // Find gearbox connected to MG1's output
+    const mg1Edges = allEdges.filter(e => e.source === mg1Node.id || e.target === mg1Node.id);
+    for (const edge of mg1Edges) {
+      const connectedNodeId = edge.source === mg1Node.id ? edge.target : edge.source;
+      const connectedNode = allNodes.find(n => n.id === connectedNodeId);
+      if (connectedNode?.data.componentType === "gearbox") {
+        const gearboxParams = connectedNode.data.params;
+        const ratios = gearboxParams.ratios as number[];
+        if (ratios && ratios.length === 1) {
+          kMG1 = ratios[0];
+          const effs = gearboxParams.efficiencies as number[];
+          etaMG1Reduction = effs?.[0] || 0.97;
+          break;
+        }
+      }
+    }
+  }
 
-  // Final drive (typically included in gearbox total ratio for eCVT)
-  const finalDrive = 16.0;
+  // Find output drivetrain gearboxes (from MG2/ring to vehicle)
+  // Look for selectable gearboxes (multiple ratios) and fixed reductions (single ratio)
+  const selectableGearboxes: { node: Node<BaseNodeData>; ratios: number[]; effs: number[] }[] = [];
+  let fixedReductionRatio = 1.0;
+  let fixedReductionEta = 1.0;
 
-  // Speed range (0 to 60 km/h)
-  const numPoints = 200;
-  const vMax = 60 / 3.6; // 60 km/h in m/s
+  if (allNodes && allEdges) {
+    // Find all gearboxes
+    const gearboxNodes = allNodes.filter(n => n.data.componentType === "gearbox");
 
-  const gearColors = ["#3b82f6", "#ef4444"]; // Blue for low, red for high
+    for (const gbNode of gearboxNodes) {
+      // Skip the MG1 reduction gearbox
+      const isMG1Reduction = allEdges.some(e =>
+        (e.source === mg1Node?.id && e.target === gbNode.id) ||
+        (e.target === mg1Node?.id && e.source === gbNode.id)
+      );
+      if (isMG1Reduction) continue;
 
-  for (let g = 0; g < Math.min(gearRatios.length, 2); g++) {
-    const gearRatio = gearRatios[g];
-    const eta = gearEfficiencies[g] || 0.97;
-    const kTotal = gearRatio * finalDrive;
-    const points: RimpullPoint[] = [];
+      const ratios = gbNode.data.params.ratios as number[];
+      const effs = gbNode.data.params.efficiencies as number[];
 
-    for (let i = 1; i <= numPoints; i++) {
-      const velocity = (vMax * i) / numPoints;
-
-      // Ring speed from vehicle speed (ring connects to gearbox input)
-      const omegaRing = (velocity / rWheel) * kTotal;
-      const rpmRing = (omegaRing * 30) / Math.PI;
-
-      // Check MG2 speed limit (MG2 is on ring)
-      if (rpmRing > rpmMG2Max) {
-        points.push({ velocity, force: 0, gear: g + 1 });
+      // Skip if no ratios defined
+      if (!ratios || !Array.isArray(ratios) || ratios.length === 0) {
         continue;
       }
 
-      // Optimal engine speed (near peak torque, ~1200 rpm)
-      let rpmEngine = 1200;
-      let omegaEngine = (rpmEngine * Math.PI) / 30;
-
-      // MG1 speed from Willis equation: ω_sun = (1+ρ)·ω_carrier - ρ·ω_ring
-      // Engine is on carrier, MG1 is on sun
-      let omegaMG1 = (1 + rho) * omegaEngine - rho * omegaRing;
-      let rpmMG1 = (omegaMG1 * 30) / Math.PI;
-
-      // Check MG1 speed limits and adjust engine speed if needed
-      if (Math.abs(rpmMG1) > rpmMG1Max) {
-        // Limit MG1 speed and recalculate engine speed
-        const omegaMG1Limit = (rpmMG1 > 0 ? rpmMG1Max : -rpmMG1Max) * Math.PI / 30;
-        omegaEngine = (omegaMG1Limit + rho * omegaRing) / (1 + rho);
-        rpmEngine = (omegaEngine * 30) / Math.PI;
-        omegaMG1 = omegaMG1Limit;
-        rpmMG1 = (omegaMG1 * 30) / Math.PI;
+      if (ratios.length > 1) {
+        // This is a selectable gearbox (multi-speed)
+        selectableGearboxes.push({
+          node: gbNode,
+          ratios: ratios,
+          effs: effs || ratios.map(() => 0.97),
+        });
+      } else if (ratios.length === 1) {
+        // Fixed reduction - multiply into total
+        fixedReductionRatio *= ratios[0];
+        fixedReductionEta *= effs?.[0] || 0.97;
       }
+    }
+  }
 
-      // Clamp engine to valid range
-      rpmEngine = Math.max(rpmEngineMin, Math.min(rpmEngineMax, rpmEngine));
-      omegaEngine = (rpmEngine * Math.PI) / 30;
-      omegaMG1 = (1 + rho) * omegaEngine - rho * omegaRing;
-      rpmMG1 = (omegaMG1 * 30) / Math.PI;
+  // Generate all gear combinations
+  // If we have multiple selectable gearboxes, compute cartesian product
+  interface GearCombo {
+    name: string;       // Short name like "L-H"
+    gearStates: string; // Descriptive gear states like "Low - High"
+    totalRatio: number;
+    totalEta: number;
+  }
 
-      // Get max torques
-      // Engine max torque (could be power-limited)
-      const omegaBase = (1801000) / tEngineMax; // power/torque
-      let tEngineAvail = omegaEngine <= omegaBase
-        ? tEngineMax
-        : 1801000 / omegaEngine;
+  // Helper to get gear name
+  const getGearName = (idx: number, totalGears: number): string => {
+    if (totalGears === 2) {
+      return idx === 0 ? "Low" : "High";
+    }
+    return `Gear ${idx + 1}`;
+  };
 
-      // MG1 max torque (power-limited at high speed)
-      const omegaMG1Base = pMG1Max / tMG1Max;
-      const tMG1MaxAtSpeed = Math.abs(omegaMG1) <= omegaMG1Base
-        ? tMG1Max
-        : pMG1Max / Math.abs(omegaMG1);
+  const getGearShort = (idx: number, totalGears: number): string => {
+    if (totalGears === 2) {
+      return idx === 0 ? "L" : "H";
+    }
+    return `${idx + 1}`;
+  };
 
-      // MG2 max torque (with boost)
-      const omegaMG2Base = pMG2Boost / tMG2Max;
-      const tMG2MaxAtSpeed = omegaRing <= omegaMG2Base
-        ? tMG2Max
-        : pMG2Boost / omegaRing;
+  let gearCombinations: GearCombo[] = [];
 
-      // MG1 must react engine torque: T_MG1 = -T_engine / (1+ρ)
-      // So max engine torque is limited by MG1 capacity
-      const tEngineLimited = Math.min(tEngineAvail, (1 + rho) * tMG1MaxAtSpeed);
+  if (selectableGearboxes.length === 0) {
+    // No selectable gearboxes found - use fallback
+    const fallbackRatios = gearboxNode
+      ? (gearboxNode.data.params.ratios as number[]) || [3.0, 1.0]
+      : [3.0, 1.0];
+    gearCombinations = fallbackRatios.map((r, i) => ({
+      name: getGearShort(i, fallbackRatios.length),
+      gearStates: getGearName(i, fallbackRatios.length),
+      totalRatio: r * fixedReductionRatio,
+      totalEta: 0.97 * fixedReductionEta,
+    }));
+  } else if (selectableGearboxes.length === 1) {
+    // Single selectable gearbox - simple case
+    const gb = selectableGearboxes[0];
+    gearCombinations = gb.ratios.map((r, i) => ({
+      name: getGearShort(i, gb.ratios.length),
+      gearStates: getGearName(i, gb.ratios.length),
+      totalRatio: r * fixedReductionRatio,
+      totalEta: (gb.effs[i] || 0.97) * fixedReductionEta,
+    }));
+  } else {
+    // Multiple selectable gearboxes - compute cartesian product
+    // Start with first gearbox
+    let combos: { indices: number[]; ratio: number; eta: number }[] =
+      selectableGearboxes[0].ratios.map((r, i) => ({
+        indices: [i],
+        ratio: r,
+        eta: selectableGearboxes[0].effs[i] || 0.97,
+      }));
 
-      // MG1 reaction torque
-      const tMG1 = -tEngineLimited / (1 + rho);
-
-      // Ring torque from engine path (through planetary)
-      // T_ring_from_engine = -ρ × T_MG1 = ρ/(1+ρ) × T_engine
-      const tRingFromEngine = -rho * tMG1;
-
-      // Total ring torque = engine contribution + MG2 contribution
-      const tRingTotal = tRingFromEngine + tMG2MaxAtSpeed;
-
-      // Wheel torque and rimpull
-      const tWheel = tRingTotal * kTotal * eta;
-      const force = tWheel / rWheel;
-
-      points.push({ velocity, force: Math.max(0, force), gear: g + 1 });
+    // Multiply with subsequent gearboxes
+    for (let gbIdx = 1; gbIdx < selectableGearboxes.length; gbIdx++) {
+      const gb = selectableGearboxes[gbIdx];
+      const newCombos: { indices: number[]; ratio: number; eta: number }[] = [];
+      for (const combo of combos) {
+        for (let i = 0; i < gb.ratios.length; i++) {
+          newCombos.push({
+            indices: [...combo.indices, i],
+            ratio: combo.ratio * gb.ratios[i],
+            eta: combo.eta * (gb.effs[i] || 0.97),
+          });
+        }
+      }
+      combos = newCombos;
     }
 
-    const gearName = g === 0 ? "Low Gear" : "High Gear";
-    curves.push({
-      name: `${gearName} (${gearRatio.toFixed(2)}:1)`,
-      points,
-      color: gearColors[g],
+    // Convert to GearCombo format
+    gearCombinations = combos.map(c => {
+      const shortNames = c.indices.map((idx, gbIdx) => {
+        const gb = selectableGearboxes[gbIdx];
+        return getGearShort(idx, gb.ratios.length);
+      });
+      const fullNames = c.indices.map((idx, gbIdx) => {
+        const gb = selectableGearboxes[gbIdx];
+        return getGearName(idx, gb.ratios.length);
+      });
+      return {
+        name: shortNames.join("-"),
+        gearStates: fullNames.join(" - "),
+        totalRatio: c.ratio * fixedReductionRatio,
+        totalEta: c.eta * fixedReductionEta,
+      };
     });
   }
 
-  return curves;
+  // If no fixed reductions found, apply default hub/intermediate reduction
+  // This is needed because eCVT systems always have final drive reductions
+  // even if they're not explicitly modeled as separate gearboxes
+  const DEFAULT_HUB_INTERMEDIATE = 2.85 * 10.83; // Intermediate * Hub from Python (~30.9:1)
+  const DEFAULT_ETA = 0.97 * 0.96;
+
+  if (fixedReductionRatio === 1.0) {
+    console.log("No fixed reductions found, applying default hub/intermediate ratio");
+    fixedReductionRatio = DEFAULT_HUB_INTERMEDIATE;
+    fixedReductionEta = DEFAULT_ETA;
+    // Recalculate combinations with defaults
+    gearCombinations = gearCombinations.map(c => ({
+      ...c,
+      totalRatio: c.totalRatio * DEFAULT_HUB_INTERMEDIATE,
+      totalEta: c.totalEta * DEFAULT_ETA,
+    }));
+  }
+
+  // Sort by ratio descending (highest ratio = lowest speed = first gear)
+  gearCombinations.sort((a, b) => b.totalRatio - a.totalRatio);
+
+  // Debug logging
+  console.log("eCVT Rimpull Calculation:", {
+    selectableGearboxesCount: selectableGearboxes.length,
+    selectableGearboxes: selectableGearboxes.map(gb => ({
+      id: gb.node.id,
+      label: gb.node.data.label,
+      ratios: gb.ratios,
+    })),
+    fixedReductionRatio,
+    fixedReductionEta,
+    gearCombinations: gearCombinations.map(g => ({
+      name: g.name,
+      states: g.gearStates,
+      ratio: g.totalRatio.toFixed(2),
+      eta: g.totalEta.toFixed(3),
+    })),
+    motorParams: {
+      mg1: { pMax: pMG1Continuous, pPeak: pMG1Peak, tMax: tMG1Max, rpmMax: rpmMG1Max, kReduction: kMG1 },
+      mg2: { pMax: pMG2Continuous, tMax: tMG2Max, rpmMax: rpmMG2Max },
+      engine: { tMax: tEngineMax, pRated: pEngineRated, rpmOpt: rpmEngineOpt },
+    },
+    planetaryRatio: rho,
+    wheelRadius: rWheel,
+  });
+
+  // Safety check: ensure we have at least one gear combination
+  if (gearCombinations.length === 0) {
+    console.warn("No gear combinations found, using default");
+    gearCombinations = [{
+      name: "1",
+      gearStates: "Default",
+      totalRatio: fixedReductionRatio || 30.0,
+      totalEta: fixedReductionEta || 0.9,
+    }];
+  }
+
+  // Speed range (0 to 70 km/h)
+  const numPoints = 300;
+  const vMaxRange = 70 / 3.6; // 70 km/h in m/s
+
+  // Color palette for multiple gears
+  const gearColors = [
+    "#3b82f6", "#ef4444", "#22c55e", "#f59e0b",
+    "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"
+  ];
+
+  // Component color palettes
+  const engineColors = ["#ef4444", "#dc2626", "#b91c1c", "#991b1b"];
+  const mg1Colors = ["#3b82f6", "#2563eb", "#1d4ed8", "#1e40af"];
+  const mg2Colors = ["#22c55e", "#16a34a", "#15803d", "#166534"];
+
+  // Show ALL gear options
+  for (let g = 0; g < gearCombinations.length; g++) {
+    const combo = gearCombinations[g];
+    const kTotal = combo.totalRatio;
+    const etaTotal = combo.totalEta;
+    const rimpullPoints: RimpullPoint[] = [];
+    const enginePoints: OperatingPoint[] = [];
+    const mg1Points: OperatingPoint[] = [];
+    const mg2Points: OperatingPoint[] = [];
+
+    for (let i = 1; i <= numPoints; i++) {
+      const velocity = (vMaxRange * i) / numPoints;
+
+      // Ring/MG2 speed from vehicle speed
+      const omegaWheel = velocity / rWheel;
+      const omegaRing = omegaWheel * kTotal;
+      const rpmRing = (omegaRing * 30) / Math.PI;
+      const rpmMG2 = rpmRing; // MG2 is on ring
+
+      // Check MG2 speed limit
+      if (rpmMG2 > rpmMG2Max) {
+        rimpullPoints.push({ velocity, force: 0, gear: g + 1 });
+        continue;
+      }
+
+      // Engine speed (fixed at optimal for max torque)
+      const omegaEngine = (rpmEngineOpt * Math.PI) / 30;
+
+      // Sun speed from Willis equation: ω_sun = (1+ρ)·ω_carrier - ρ·ω_ring
+      const omegaSun = (1 + rho) * omegaEngine - rho * omegaRing;
+      const rpmSun = (omegaSun * 30) / Math.PI;
+
+      // MG1 speed (with reduction gear): ω_MG1 = ω_sun / K_mg1
+      const rpmMG1 = Math.abs(rpmSun) / kMG1;
+
+      // Get MG1 max torque at this speed (using peak power)
+      const omegaMG1 = (rpmMG1 * Math.PI) / 30;
+      const omegaMG1BasePeak = pMG1Peak / tMG1Max;
+      let tMG1Available: number;
+      if (omegaMG1 <= omegaMG1BasePeak) {
+        tMG1Available = tMG1Max;
+      } else if (rpmMG1 <= rpmMG1Max) {
+        tMG1Available = pMG1Peak / omegaMG1;
+      } else {
+        tMG1Available = 0;
+      }
+
+      // Get MG2 max torque at this speed
+      const omegaMG2Base = pMG2Continuous / tMG2Max;
+      let tMG2Available: number;
+      if (omegaRing <= omegaMG2Base) {
+        tMG2Available = tMG2Max;
+      } else if (rpmMG2 <= rpmMG2Max) {
+        tMG2Available = pMG2Continuous / omegaRing;
+      } else {
+        tMG2Available = 0;
+      }
+
+      // Sun torque = MG1 torque × K_mg1 × η_mg1
+      const tSun = tMG1Available * kMG1 * etaMG1Reduction;
+
+      // Engine torque limited by sun torque capacity
+      // T_engine_max from MG1 = T_sun × (1+ρ)
+      const tEngineFromMG1Limit = tSun * (1 + rho);
+      const tEngineUsable = Math.min(tEngineMax, tEngineFromMG1Limit);
+
+      // Ring torque from engine: T_ring_engine = ρ/(1+ρ) × T_engine
+      const tRingFromEngine = (rho / (1 + rho)) * tEngineUsable;
+
+      // Total ring torque
+      const tRingTotal = tRingFromEngine + tMG2Available;
+
+      // Wheel torque and rimpull
+      const tWheel = tRingTotal * kTotal * etaTotal;
+      const force = tWheel / rWheel;
+
+      rimpullPoints.push({ velocity, force: Math.max(0, force), gear: g + 1 });
+
+      // Collect operating points for each component
+      const pEngine = tEngineUsable * omegaEngine;
+      const pMG1 = tMG1Available * omegaMG1;
+      const pMG2 = tMG2Available * omegaRing;
+
+      enginePoints.push({
+        velocity,
+        rpm: rpmEngineOpt,
+        torque: tEngineUsable,
+        power: pEngine,
+        gear: g + 1,
+      });
+
+      mg1Points.push({
+        velocity,
+        rpm: rpmMG1,
+        torque: tMG1Available,
+        power: pMG1,
+        gear: g + 1,
+      });
+
+      mg2Points.push({
+        velocity,
+        rpm: rpmMG2,
+        torque: tMG2Available,
+        power: pMG2,
+        gear: g + 1,
+      });
+    }
+
+    // Create descriptive labels showing gear states and total ratio
+    // For rimpull: show all components and gear states
+    // For operating: show component name and gear states
+    const gearStates = combo.gearStates;  // e.g., "Low - High" or "Gear 1"
+
+    // Filter out any points with NaN or Infinity values
+    const validRimpullPoints = rimpullPoints.filter(p =>
+      isFinite(p.velocity) && isFinite(p.force) && !isNaN(p.velocity) && !isNaN(p.force)
+    );
+    const validEnginePoints = enginePoints.filter(p =>
+      isFinite(p.velocity) && isFinite(p.rpm) && isFinite(p.torque) && isFinite(p.power)
+    );
+    const validMG1Points = mg1Points.filter(p =>
+      isFinite(p.velocity) && isFinite(p.rpm) && isFinite(p.torque) && isFinite(p.power)
+    );
+    const validMG2Points = mg2Points.filter(p =>
+      isFinite(p.velocity) && isFinite(p.rpm) && isFinite(p.torque) && isFinite(p.power)
+    );
+
+    // Debug: log if points were filtered out
+    if (validRimpullPoints.length !== rimpullPoints.length) {
+      console.warn(`Gear ${combo.name}: filtered ${rimpullPoints.length - validRimpullPoints.length} invalid rimpull points`);
+    }
+
+    // Rimpull label shows combined output
+    const rimpullLabel = `${gearStates} (${kTotal.toFixed(0)}:1)`;
+
+    rimpullCurves.push({
+      name: rimpullLabel,
+      points: validRimpullPoints,
+      color: gearColors[g % gearColors.length],
+    });
+
+    // Operating curves show component + gear states
+    // Only add curves if they have valid points
+    if (validEnginePoints.length > 0) {
+      operatingCurves.push({
+        name: `${engineLabel} - ${gearStates}`,
+        component: "engine",
+        gear: combo.name,
+        points: validEnginePoints,
+        color: engineColors[g % engineColors.length],
+      });
+    }
+
+    if (validMG1Points.length > 0) {
+      operatingCurves.push({
+        name: `${mg1Label} - ${gearStates}`,
+        component: "mg1",
+        gear: combo.name,
+        points: validMG1Points,
+        color: mg1Colors[g % mg1Colors.length],
+      });
+    }
+
+    if (validMG2Points.length > 0) {
+      operatingCurves.push({
+        name: `${mg2Label} - ${gearStates}`,
+        component: "mg2",
+        gear: combo.name,
+        points: validMG2Points,
+        color: mg2Colors[g % mg2Colors.length],
+      });
+    }
+  }
+
+  return { rimpull: rimpullCurves, operating: operatingCurves };
 }
 
 /**
@@ -480,7 +797,10 @@ function computeElectricRimpull(
     ? (gearboxNode.data.params.ratios as number[]) || [1.0]
     : [1.0];
 
-  const gearColors = ["#3b82f6", "#22c55e", "#f97316"];
+  const gearColors = [
+    "#3b82f6", "#ef4444", "#22c55e", "#f59e0b",
+    "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"
+  ];
 
   for (let g = 0; g < gearRatios.length; g++) {
     const ratio = gearRatios[g];
@@ -591,10 +911,19 @@ export function useSimulation() {
         controller.targetVelocity = config.targetVelocity;
         console.log("Target velocity:", config.targetVelocity);
 
-        // Initial state (zero velocities)
+        // Initial state
         const x0: Record<string, number> = {};
         for (const name of drivetrain.stateNames) {
-          x0[name] = 0;
+          // Set appropriate initial values based on state type
+          if (name.toLowerCase().includes("soc")) {
+            // Battery SOC should start at initial value (default 80%)
+            const batteryNode = nodes.find(n => n.data.componentType === "battery");
+            const socInit = batteryNode?.data.params.socInit as number ?? 0.8;
+            x0[name] = socInit;
+          } else {
+            // Other states (shaft speeds) start at zero
+            x0[name] = 0;
+          }
         }
         console.log("Initial state:", x0);
 
@@ -622,26 +951,60 @@ export function useSimulation() {
           }
         );
         console.log("Simulation complete, points:", result.time.length);
+        console.log("Available outputs:", Object.keys(result.outputs));
+        console.log("Available states:", Object.keys(result.states));
 
-        // Convert to UI format
+        // Debug: show sample values from outputs
+        for (const [key, values] of Object.entries(result.outputs)) {
+          if (Array.isArray(values) && values.length > 0) {
+            console.log(`  Output "${key}": first=${values[0]?.toFixed(4)}, last=${values[values.length-1]?.toFixed(4)}, max=${Math.max(...values).toFixed(4)}`);
+          }
+        }
+
+        // Convert to UI format - try multiple possible key names
+        const velocityKey = Object.keys(result.outputs).find(k =>
+          k.toLowerCase().includes("velocity") || k.toLowerCase().includes("speed") || k === "v"
+        );
+        const fuelRateKey = Object.keys(result.outputs).find(k =>
+          k.toLowerCase().includes("fuel") || k.toLowerCase().includes("mdot")
+        );
+        const enginePowerKey = Object.keys(result.outputs).find(k =>
+          k.toLowerCase().includes("engine") && k.toLowerCase().includes("power") ||
+          k.startsWith("P_engine") || k.startsWith("p_engine")
+        );
+        const motorPowerKey = Object.keys(result.outputs).find(k =>
+          k.toLowerCase().includes("motor") && k.toLowerCase().includes("power") ||
+          k.startsWith("P_motor") || k.startsWith("p_motor")
+        );
+
+        console.log("Matched keys:", { velocityKey, fuelRateKey, enginePowerKey, motorPowerKey });
+
         const simResult: SimResult = {
           time: result.time,
-          velocity: result.outputs.velocity || [],
+          velocity: velocityKey ? result.outputs[velocityKey] : [],
           grade: result.outputs.grade || new Array(result.time.length).fill(config.grade),
-          fuelRate: result.outputs.fuel_rate,
-          enginePower: Object.entries(result.outputs)
-            .find(([k]) => k.startsWith("P_engine"))?.[1],
-          motorPower: Object.entries(result.outputs)
-            .find(([k]) => k.startsWith("P_motor"))?.[1],
+          fuelRate: fuelRateKey ? result.outputs[fuelRateKey] : undefined,
+          enginePower: enginePowerKey ? result.outputs[enginePowerKey] : undefined,
+          motorPower: motorPowerKey ? result.outputs[motorPowerKey] : undefined,
         };
 
         // Check for SOC in states
         for (const [key, values] of Object.entries(result.states)) {
           if (key.toLowerCase().includes("soc") || key.toLowerCase().includes("battery")) {
+            console.log(`Found SOC state "${key}": first=${values[0]?.toFixed(4)}, last=${values[values.length-1]?.toFixed(4)}`);
             simResult.soc = values;
             break;
           }
         }
+
+        // Debug: show final simResult data availability
+        console.log("SimResult data:", {
+          hasVelocity: simResult.velocity && simResult.velocity.length > 0,
+          hasFuelRate: !!simResult.fuelRate,
+          hasEnginePower: !!simResult.enginePower,
+          hasMotorPower: !!simResult.motorPower,
+          hasSOC: !!simResult.soc,
+        });
 
         setResult(simResult);
         setStatus("completed");
@@ -654,16 +1017,19 @@ export function useSimulation() {
     [config, setStatus, setProgress, setResult, setError]
   );
 
+  const setOperatingCurves = useSimulationStore((s) => s.setOperatingCurves);
+
   const calculateRimpull = useCallback(
     (nodes: Node<BaseNodeData>[], edges: Edge[]) => {
       try {
-        const curves = computeRimpull(nodes, edges);
-        setRimpullCurves(curves);
+        const result = computeRimpull(nodes, edges);
+        setRimpullCurves(result.rimpull);
+        setOperatingCurves(result.operating);
       } catch (error) {
         console.error("Rimpull calculation failed:", error);
       }
     },
-    [setRimpullCurves]
+    [setRimpullCurves, setOperatingCurves]
   );
 
   return {

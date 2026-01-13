@@ -55,6 +55,28 @@ export interface RimpullCurve {
   color: string;
 }
 
+/**
+ * Operating point for motor/engine curves.
+ */
+export interface OperatingPoint {
+  velocity: number; // Vehicle velocity [m/s]
+  rpm: number;      // Component RPM
+  torque: number;   // Component torque [N·m]
+  power: number;    // Component power [W]
+  gear?: number;
+}
+
+/**
+ * Operating curve for a motor or engine.
+ */
+export interface OperatingCurve {
+  name: string;
+  component: "engine" | "mg1" | "mg2";
+  gear: string;
+  points: OperatingPoint[];
+  color: string;
+}
+
 type SimStatus = "idle" | "running" | "completed" | "error";
 
 interface SimulationState {
@@ -64,6 +86,7 @@ interface SimulationState {
   error: string | null;
   result: SimResult | null;
   rimpullCurves: RimpullCurve[];
+  operatingCurves: OperatingCurve[];
 
   // Comparison mode
   comparisonMode: boolean;
@@ -77,6 +100,7 @@ interface SimulationState {
   setError: (error: string | null) => void;
   setResult: (result: SimResult | null) => void;
   setRimpullCurves: (curves: RimpullCurve[]) => void;
+  setOperatingCurves: (curves: OperatingCurve[]) => void;
   reset: () => void;
 
   // Comparison actions
@@ -96,12 +120,16 @@ const DEFAULT_CONFIG: SimConfig = {
 
 export const PRESET_COLORS: Record<PresetName, string> = {
   "diesel-793d": "#ef4444",   // Red
+  "diesel-789d": "#22c55e",   // Green
   "ecvt-split": "#3b82f6",    // Blue
+  "ecvt-detailed": "#8b5cf6", // Purple
 };
 
 export const PRESET_LABELS: Record<PresetName, string> = {
-  "diesel-793d": "Diesel 7-Speed",
+  "diesel-793d": "CAT 793D Diesel",
+  "diesel-789d": "CAT 789D Diesel",
   "ecvt-split": "eCVT Power-Split",
+  "ecvt-detailed": "eCVT Detailed",
 };
 
 export const useSimulationStore = create<SimulationState>((set) => ({
@@ -111,6 +139,7 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   error: null,
   result: null,
   rimpullCurves: [],
+  operatingCurves: [],
 
   // Comparison mode
   comparisonMode: false,
@@ -131,6 +160,8 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   setResult: (result) => set({ result, status: result ? "completed" : "idle" }),
 
   setRimpullCurves: (curves) => set({ rimpullCurves: curves }),
+
+  setOperatingCurves: (curves) => set({ operatingCurves: curves }),
 
   reset: () =>
     set({

@@ -77,19 +77,29 @@ export function ComparisonChart({ results, metric }: ComparisonChartProps) {
 
   const layout: Partial<Plotly.Layout> = {
     autosize: true,
-    margin: { t: 30, r: 30, b: 50, l: 60 },
+    margin: { t: 30, r: 30, b: 60, l: 70 },
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
     font: { color: "#888" },
     xaxis: {
-      title: "Time (s)",
+      title: {
+        text: "Time (s)",
+        font: { color: "#aaa", size: 12 },
+        standoff: 10,
+      },
       gridcolor: "#333",
       zerolinecolor: "#444",
+      tickfont: { color: "#888" },
     },
     yaxis: {
-      title: `${config.label} (${config.unit})`,
+      title: {
+        text: `${config.label} (${config.unit})`,
+        font: { color: "#aaa", size: 12 },
+        standoff: 10,
+      },
       gridcolor: "#333",
       zerolinecolor: "#444",
+      tickfont: { color: "#888" },
     },
     legend: {
       x: 0,

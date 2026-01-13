@@ -2,123 +2,66 @@ import Plot from "react-plotly.js";
 
 interface SimulationChartProps {
   time: number[];
-  velocity: number[];
-  grade?: number[];
-  fuelRate?: number[];
-  enginePower?: number[];
-  motorPower?: number[];
+  data: number[];
+  label: string;
+  unit: string;
+  color: string;
 }
 
 export function SimulationChart({
   time,
-  velocity,
-  grade,
-  fuelRate,
-  enginePower,
-  motorPower,
+  data,
+  label,
+  unit,
+  color,
 }: SimulationChartProps) {
-  // Convert velocity to km/h
-  const velocityKmh = velocity.map((v) => v * 3.6);
+  // Handle empty data gracefully
+  if (!data || data.length === 0 || !time || time.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-muted">
+        No data available
+      </div>
+    );
+  }
 
-  // Build traces
   const traces: Plotly.Data[] = [
     {
       x: time,
-      y: velocityKmh,
+      y: data,
       type: "scatter",
       mode: "lines",
-      name: "Velocity (km/h)",
-      line: { color: "#22c55e", width: 2 },
-      yaxis: "y",
+      name: `${label} (${unit})`,
+      line: { color, width: 2 },
     },
   ];
 
-  // Add engine power if available
-  if (enginePower && enginePower.some((p) => p !== 0)) {
-    const powerKw = enginePower.map((p) => p / 1000);
-    traces.push({
-      x: time,
-      y: powerKw,
-      type: "scatter",
-      mode: "lines",
-      name: "Engine Power (kW)",
-      line: { color: "#f97316", width: 2 },
-      yaxis: "y2",
-    });
-  }
-
-  // Add motor power if available
-  if (motorPower && motorPower.some((p) => p !== 0)) {
-    const powerKw = motorPower.map((p) => p / 1000);
-    traces.push({
-      x: time,
-      y: powerKw,
-      type: "scatter",
-      mode: "lines",
-      name: "Motor Power (kW)",
-      line: { color: "#3b82f6", width: 2, dash: "dash" },
-      yaxis: "y2",
-    });
-  }
-
-  // Add fuel rate if available
-  if (fuelRate && fuelRate.some((f) => f !== 0)) {
-    const fuelKgH = fuelRate.map((f) => f * 3600);
-    traces.push({
-      x: time,
-      y: fuelKgH,
-      type: "scatter",
-      mode: "lines",
-      name: "Fuel Rate (kg/h)",
-      line: { color: "#ef4444", width: 1.5, dash: "dot" },
-      yaxis: "y3",
-    });
-  }
-
   const layout: Partial<Plotly.Layout> = {
-    title: "",
     autosize: true,
-    margin: { t: 20, r: 80, b: 50, l: 60 },
+    margin: { t: 20, r: 40, b: 60, l: 70 },
     paper_bgcolor: "transparent",
     plot_bgcolor: "transparent",
     font: { color: "#888" },
     xaxis: {
-      title: "Time (s)",
+      title: {
+        text: "Time (s)",
+        font: { color: "#aaa", size: 12 },
+        standoff: 10,
+      },
       gridcolor: "#333",
       zerolinecolor: "#444",
+      tickfont: { color: "#888" },
     },
     yaxis: {
-      title: "Velocity (km/h)",
-      titlefont: { color: "#22c55e" },
-      tickfont: { color: "#22c55e" },
+      title: {
+        text: `${label} (${unit})`,
+        font: { color: "#aaa", size: 12 },
+        standoff: 10,
+      },
+      tickfont: { color: "#888" },
       gridcolor: "#333",
       zerolinecolor: "#444",
-      side: "left",
     },
-    yaxis2: {
-      title: "Power (kW)",
-      titlefont: { color: "#f97316" },
-      tickfont: { color: "#f97316" },
-      overlaying: "y",
-      side: "right",
-      showgrid: false,
-    },
-    yaxis3: {
-      title: "Fuel (kg/h)",
-      titlefont: { color: "#ef4444" },
-      tickfont: { color: "#ef4444" },
-      overlaying: "y",
-      side: "right",
-      position: 0.95,
-      showgrid: false,
-    },
-    legend: {
-      x: 0,
-      y: 1.1,
-      orientation: "h",
-      bgcolor: "transparent",
-    },
-    showlegend: true,
+    showlegend: false,
   };
 
   const config: Partial<Plotly.Config> = {
