@@ -279,7 +279,7 @@ export const useDrivetrainStore = create<DrivetrainState>((set, get) => ({
             {
               id: "engine-1",
               type: "engineNode",
-              position: { x: 100, y: 250 },
+              position: { x: 50, y: 250 },
               data: {
                 label: "CAT 3516E",
                 componentType: "engine",
@@ -289,27 +289,27 @@ export const useDrivetrainStore = create<DrivetrainState>((set, get) => ({
             {
               id: "motor-1",
               type: "motorNode",
-              position: { x: 100, y: 100 },
+              position: { x: 50, y: 80 },
               data: {
                 label: "MG1",
                 componentType: "motor",
-                params: { ...DEFAULT_PARAMS.motor, pMax: 200000, tMax: 3000 },
+                params: { ...DEFAULT_PARAMS.motor, pMax: 250000, tMax: 3500, rpmMax: 6000 },
               },
             },
             {
-              id: "motor-2",
-              type: "motorNode",
-              position: { x: 500, y: 250 },
+              id: "gearbox-mg1",
+              type: "gearboxNode",
+              position: { x: 200, y: 80 },
               data: {
-                label: "MG2",
-                componentType: "motor",
-                params: { ...DEFAULT_PARAMS.motor, pMax: 350000, tMax: 2000, pBoost: 500000 },
+                label: "MG1 Reduction",
+                componentType: "gearbox",
+                params: { ratios: [3.5], efficiencies: [0.97] },
               },
             },
             {
               id: "planetary-1",
               type: "planetaryNode",
-              position: { x: 300, y: 175 },
+              position: { x: 350, y: 165 },
               data: {
                 label: "Planetary",
                 componentType: "planetary",
@@ -317,19 +317,59 @@ export const useDrivetrainStore = create<DrivetrainState>((set, get) => ({
               },
             },
             {
+              id: "gearbox-postring",
+              type: "gearboxNode",
+              position: { x: 500, y: 250 },
+              data: {
+                label: "Post-Ring",
+                componentType: "gearbox",
+                params: { ratios: [1.0], efficiencies: [0.98] },
+              },
+            },
+            {
+              id: "motor-2",
+              type: "motorNode",
+              position: { x: 650, y: 250 },
+              data: {
+                label: "MG2",
+                componentType: "motor",
+                params: { ...DEFAULT_PARAMS.motor, pMax: 500000, tMax: 5400, rpmMax: 4000, pBoost: 500000 },
+              },
+            },
+            {
               id: "gearbox-1",
               type: "gearboxNode",
-              position: { x: 650, y: 250 },
+              position: { x: 800, y: 250 },
               data: {
                 label: "2-Speed",
                 componentType: "gearbox",
-                params: { ratios: [5.0, 0.67], efficiencies: [0.97, 0.97] },
+                params: { ratios: [3.0, 1.0], efficiencies: [0.97, 0.97] },
+              },
+            },
+            {
+              id: "gearbox-intermediate",
+              type: "gearboxNode",
+              position: { x: 950, y: 250 },
+              data: {
+                label: "Intermediate",
+                componentType: "gearbox",
+                params: { ratios: [2.85], efficiencies: [0.97] },
+              },
+            },
+            {
+              id: "gearbox-finaldrive",
+              type: "gearboxNode",
+              position: { x: 1100, y: 250 },
+              data: {
+                label: "Final Drive",
+                componentType: "gearbox",
+                params: { ratios: [10.83], efficiencies: [0.96] },
               },
             },
             {
               id: "battery-1",
               type: "batteryNode",
-              position: { x: 300, y: 400 },
+              position: { x: 350, y: 420 },
               data: {
                 label: "Battery",
                 componentType: "battery",
@@ -339,7 +379,7 @@ export const useDrivetrainStore = create<DrivetrainState>((set, get) => ({
             {
               id: "vehicle-1",
               type: "vehicleNode",
-              position: { x: 850, y: 250 },
+              position: { x: 1250, y: 250 },
               data: {
                 label: "CAT 793D",
                 componentType: "vehicle",
@@ -349,16 +389,20 @@ export const useDrivetrainStore = create<DrivetrainState>((set, get) => ({
           ],
           edges: [
             { id: "e1", source: "engine-1", target: "planetary-1", sourceHandle: "shaft", targetHandle: "carrier", type: "mechanical" },
-            { id: "e2", source: "motor-1", target: "planetary-1", sourceHandle: "shaft-out", targetHandle: "sun", type: "mechanical" },
-            { id: "e3", source: "planetary-1", target: "motor-2", sourceHandle: "ring", targetHandle: "shaft-in", type: "mechanical" },
-            { id: "e4", source: "motor-2", target: "gearbox-1", sourceHandle: "shaft-out", targetHandle: "input", type: "mechanical" },
-            { id: "e5", source: "gearbox-1", target: "vehicle-1", sourceHandle: "output", targetHandle: "wheels", type: "mechanical" },
-            { id: "e6", source: "motor-1", target: "battery-1", sourceHandle: "electrical", targetHandle: "electrical", type: "electrical" },
-            { id: "e7", source: "motor-2", target: "battery-1", sourceHandle: "electrical", targetHandle: "electrical", type: "electrical" },
+            { id: "e2", source: "motor-1", target: "gearbox-mg1", sourceHandle: "shaft-out", targetHandle: "input", type: "mechanical" },
+            { id: "e3", source: "gearbox-mg1", target: "planetary-1", sourceHandle: "output", targetHandle: "sun", type: "mechanical" },
+            { id: "e4", source: "planetary-1", target: "gearbox-postring", sourceHandle: "ring", targetHandle: "input", type: "mechanical" },
+            { id: "e5", source: "gearbox-postring", target: "motor-2", sourceHandle: "output", targetHandle: "shaft-in", type: "mechanical" },
+            { id: "e6", source: "motor-2", target: "gearbox-1", sourceHandle: "shaft-out", targetHandle: "input", type: "mechanical" },
+            { id: "e7", source: "gearbox-1", target: "gearbox-intermediate", sourceHandle: "output", targetHandle: "input", type: "mechanical" },
+            { id: "e8", source: "gearbox-intermediate", target: "gearbox-finaldrive", sourceHandle: "output", targetHandle: "input", type: "mechanical" },
+            { id: "e9", source: "gearbox-finaldrive", target: "vehicle-1", sourceHandle: "output", targetHandle: "wheels", type: "mechanical" },
+            { id: "e10", source: "motor-1", target: "battery-1", sourceHandle: "electrical", targetHandle: "electrical", type: "electrical" },
+            { id: "e11", source: "motor-2", target: "battery-1", sourceHandle: "electrical", targetHandle: "electrical", type: "electrical" },
           ],
           selectedNodeId: null,
         });
-        nodeIdCounter = 8;
+        nodeIdCounter = 12;
         break;
     }
   },
