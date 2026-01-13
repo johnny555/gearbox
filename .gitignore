@@ -41,5 +41,5 @@ htmlcov/
 .tox/
 .nox/
 
-# Generated output (uncomment if you don't want to track these)
-# *.png
+# Generated output
+*.png
