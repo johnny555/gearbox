@@ -43,3 +43,10 @@ htmlcov/
 
 # Generated output
 *.png
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Vite build artifacts
+vite.config.js
+vite.config.d.ts
