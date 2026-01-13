@@ -353,7 +353,7 @@ export class DrivetrainSimulator {
 
     // Engine power
     for (const [compName, component] of components) {
-      if (component.constructor.name.includes('Engine')) {
+      if (component.componentType === 'engine') {
         const tKey = `T_${compName}`;
         if (tKey in controls) {
           const speedKey = `${compName}.shaft`;
@@ -383,7 +383,7 @@ export class DrivetrainSimulator {
 
     // Motor power
     for (const [compName, component] of components) {
-      if (component.constructor.name.includes('Motor')) {
+      if (component.componentType === 'motor') {
         const tKey = `T_${compName}`;
         if (tKey in controls) {
           const speedKey = `${compName}.shaft`;

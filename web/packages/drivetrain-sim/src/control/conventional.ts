@@ -30,8 +30,8 @@ export function createShiftSchedule(
   ratios: number[],
   engineRpmUpshift: number = 1500.0,
   engineRpmDownshift: number = 1000.0,
-  wheelRadius: number = 1.78,
-  finalDrive: number = 16.0
+  wheelRadius: number,
+  finalDrive: number
 ): GearShiftSchedule {
   const omegaUp = (engineRpmUpshift * Math.PI) / 30.0;
   const omegaDown = (engineRpmDownshift * Math.PI) / 30.0;
@@ -79,6 +79,8 @@ export class ConventionalDieselController extends DrivetrainController {
   private _currentGear: number = 0;
   private _engine: any;
   private _gearbox: any;
+  private _wheelRadius: number;
+  private _finalDrive: number;
 
   constructor(
     drivetrain: Drivetrain,
@@ -96,6 +98,11 @@ export class ConventionalDieselController extends DrivetrainController {
     this._engine = drivetrain.getComponent(engineName);
     this._gearbox = drivetrain.getComponent(gearboxName);
 
+    // Discover wheel radius and final drive from components
+    const { wheelRadius, finalDrive } = this._discoverDrivelineParams();
+    this._wheelRadius = wheelRadius;
+    this._finalDrive = finalDrive;
+
     // Create shift schedule if not provided
     if (shiftSchedule) {
       this.shiftSchedule = shiftSchedule;
@@ -104,31 +111,47 @@ export class ConventionalDieselController extends DrivetrainController {
     }
   }
 
-  private _createDefaultSchedule(): void {
-    const ratios = this._gearbox.params.ratios;
-
-    // Find vehicle component for wheel radius
-    let wheelRadius = 1.78;
-    let finalDrive = 16.0;
+  private _discoverDrivelineParams(): { wheelRadius: number; finalDrive: number } {
+    let wheelRadius: number | null = null;
+    let finalDrive: number | null = null;
 
     for (const comp of this.drivetrain.topology.components.values()) {
-      if ('params' in comp && 'rWheel' in (comp as any).params) {
-        wheelRadius = (comp as any).params.rWheel;
+      // Find vehicle for wheel radius
+      if (comp.componentType === 'vehicle' && 'params' in comp) {
+        const vehicleParams = (comp as any).params;
+        if ('rWheel' in vehicleParams) {
+          wheelRadius = vehicleParams.rWheel;
+        }
       }
+      // Find final drive ratio
       if (
+        comp.componentType === 'gearbox' &&
         comp.name.toLowerCase().includes('final') &&
-        'currentRatio' in (comp as any)
+        'currentRatio' in comp
       ) {
         finalDrive = (comp as any).currentRatio;
       }
     }
 
+    if (wheelRadius === null) {
+      throw new Error('Could not find vehicle component with wheel radius');
+    }
+    if (finalDrive === null) {
+      throw new Error('Could not find final drive component');
+    }
+
+    return { wheelRadius, finalDrive };
+  }
+
+  private _createDefaultSchedule(): void {
+    const ratios = this._gearbox.params.ratios;
+
     this.shiftSchedule = createShiftSchedule(
       ratios,
       1500.0,
       1000.0,
-      wheelRadius,
-      finalDrive
+      this._wheelRadius,
+      this._finalDrive
     );
   }
 
@@ -188,26 +211,16 @@ export class ConventionalDieselController extends DrivetrainController {
     state: Record<string, number>,
     tDemand: number
   ): number {
-    // Get engine speed from state
-    const engineSpeedKey = `${this.engineName}.shaft`;
-    let omegaE = 0.0;
+    // Get engine speed from state using exact key format
+    const engineShaftKey = `${this.engineName}.shaft`;
+    let omegaE = Math.abs(state[engineShaftKey] ?? 0);
 
-    // Look for engine speed in state
-    for (const [key, value] of Object.entries(state)) {
-      if (key.includes(engineSpeedKey) || key.includes(this.engineName)) {
-        omegaE = Math.abs(value);
-        break;
-      }
-    }
-
-    // If not found, estimate from vehicle speed
+    // If not in state (shaft may be eliminated by constraint), estimate from vehicle speed
     if (omegaE < 1.0) {
       const velocity = this.getVelocity(state);
       const gearRatio = this._gearbox.getRatio(this._currentGear);
-      const finalDrive = 16.0;
-      const wheelRadius = 1.78;
-      const omegaWheel = velocity / wheelRadius;
-      omegaE = omegaWheel * gearRatio * finalDrive;
+      const omegaWheel = velocity / this._wheelRadius;
+      omegaE = omegaWheel * gearRatio * this._finalDrive;
     }
 
     // Convert to RPM and clip

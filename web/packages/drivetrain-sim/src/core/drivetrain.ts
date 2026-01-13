@@ -237,18 +237,14 @@ export class Drivetrain {
     this._controlInputs = [];
 
     for (const [compName, component] of this._components) {
-      const compType = component.constructor.name;
-      if (compType.includes('Engine')) {
-        this._controlInputs.push(`T_${compName}`);
-      } else if (compType.includes('Motor')) {
+      if (component.componentType === 'engine' || component.componentType === 'motor') {
         this._controlInputs.push(`T_${compName}`);
       }
     }
 
     // Add gear selection for gearboxes
     for (const [compName, component] of this._components) {
-      const compType = component.constructor.name;
-      if (compType.includes('Gearbox')) {
+      if (component.componentType === 'gearbox') {
         this._controlInputs.push(`gear_${compName}`);
         this._gearState.set(compName, 0);
       }
@@ -467,8 +463,9 @@ export class Drivetrain {
       }
     }
 
-    // Compute torques from all components
+    // Compute torques from all components and track electrical power
     const allTorques: Record<string, number> = {};
+    let totalElectricalPower = 0; // Sum of motor electrical power (positive = consuming)
 
     for (const [compName, component] of this._components) {
       // Build port speeds dict for this component
@@ -498,6 +495,14 @@ export class Drivetrain {
       for (const [portName, torque] of Object.entries(torques)) {
         const dofName = `${compName}.${portName}`;
         allTorques[dofName] = torque;
+      }
+
+      // Calculate electrical power for motors
+      if (component.componentType === 'motor' && 'getElectricalPower' in component) {
+        const shaftSpeed = portSpeeds['shaft'] ?? 0;
+        const shaftTorque = torques['shaft'] ?? 0;
+        const electricalPower = (component as any).getElectricalPower(shaftTorque, shaftSpeed);
+        totalElectricalPower += electricalPower;
       }
     }
 
@@ -557,6 +562,11 @@ export class Drivetrain {
         const dofName = `${compName}.${portName}`;
         portValues[`${portName}_speed`] = allSpeeds[dofName] ?? 0;
         portValues[`${portName}_torque`] = allTorques[dofName] ?? 0;
+      }
+
+      // Pass electrical power to battery components
+      if (component.componentType === 'battery') {
+        portValues['electrical_power'] = totalElectricalPower;
       }
 
       // Get current internal states

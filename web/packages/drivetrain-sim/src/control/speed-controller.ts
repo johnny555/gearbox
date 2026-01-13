@@ -30,6 +30,7 @@ export class SpeedController extends DrivetrainController {
   private _integral: number = 0;
   private _gearboxName: string | null = null;
   private _currentGear: number = 0;
+  private _vMax: number;
 
   constructor(
     drivetrain: Drivetrain,
@@ -50,6 +51,22 @@ export class SpeedController extends DrivetrainController {
 
     // Find gearbox for gear control
     this._gearboxName = this._findGearbox();
+
+    // Discover max speed from vehicle component
+    this._vMax = this._discoverMaxSpeed();
+  }
+
+  private _discoverMaxSpeed(): number {
+    for (const comp of this.drivetrain.topology.components.values()) {
+      if (comp.componentType === 'vehicle' && 'params' in comp) {
+        const vehicleParams = (comp as any).params;
+        if ('vMax' in vehicleParams) {
+          return vehicleParams.vMax;
+        }
+      }
+    }
+    // Default fallback if no vehicle found
+    return 15.0;
   }
 
   private _discoverActuators(): void {
@@ -143,14 +160,10 @@ export class SpeedController extends DrivetrainController {
       // Clip to actuator limits
       const component = this.drivetrain.getComponent(actuator);
       if (component && 'clipTorque' in component) {
-        // Get actuator speed
-        let omega = 0;
-        for (const [key, value] of Object.entries(state)) {
-          if (key.includes(actuator)) {
-            omega = Math.abs(value);
-            break;
-          }
-        }
+        // Get actuator speed using exact state key format
+        // Engines and motors have a 'shaft' port
+        const shaftKey = `${actuator}.shaft`;
+        const omega = Math.abs(state[shaftKey] ?? 0);
 
         const rpm = (omega * 30.0) / Math.PI;
         tAlloc = (component as any).clipTorque(rpm, tAlloc);
@@ -171,8 +184,7 @@ export class SpeedController extends DrivetrainController {
     const nGears = gearbox.nGears;
 
     // Simple speed-based selection
-    const vMax = 15.0; // Assumed max speed
-    const gearWidth = vMax / nGears;
+    const gearWidth = this._vMax / nGears;
 
     let gear = Math.floor(velocity / gearWidth);
     gear = Math.max(0, Math.min(gear, nGears - 1));

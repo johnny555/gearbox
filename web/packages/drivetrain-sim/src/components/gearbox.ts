@@ -96,6 +96,8 @@ export class NSpeedGearboxComponent extends DrivetrainComponent {
     efficiencyParams: Required<GearboxEfficiencyParams>;
   };
   private _currentGear: number;
+  private _lastInputSpeed: number = 0;
+  private _lastInputTorque: number = 0;
 
   constructor(params: GearboxParams = {}, name: string = 'gearbox') {
     super(name);
@@ -173,12 +175,17 @@ export class NSpeedGearboxComponent extends DrivetrainComponent {
   }
 
   getConstraints(): KinematicConstraint[] {
+    // Use variable efficiency if enabled, otherwise use nominal efficiency
+    const efficiency = this.params.useVariableEfficiency
+      ? this.getEfficiency(this._lastInputSpeed, this._lastInputTorque)
+      : this.currentEfficiency;
+
     return [
       new GearRatioConstraint({
         inputPort: 'input',
         outputPort: 'output',
         ratio: this.currentRatio,
-        efficiency: this.currentEfficiency,
+        efficiency,
       }),
     ];
   }
@@ -272,7 +279,7 @@ export class NSpeedGearboxComponent extends DrivetrainComponent {
   }
 
   computeTorques(
-    _portSpeeds: Record<string, number>,
+    portSpeeds: Record<string, number>,
     controlInputs: Record<string, number>,
     _internalStates?: Record<string, number>
   ): Record<string, number> {
@@ -281,8 +288,30 @@ export class NSpeedGearboxComponent extends DrivetrainComponent {
       this.gear = Math.floor(controlInputs.gear);
     }
 
-    // Gearbox itself doesn't produce torque, it transforms it
+    // Store operating point for variable efficiency calculation
+    this._lastInputSpeed = Math.abs(portSpeeds['input'] ?? 0);
+
+    // Calculate fixed power losses if enabled
+    // These are subtracted from output as a drag torque
+    if (this.params.useVariableEfficiency) {
+      const outputSpeed = portSpeeds['output'] ?? 0;
+      if (Math.abs(outputSpeed) > 1e-6) {
+        const ep = this.params.efficiencyParams;
+        // Fixed power loss manifests as drag torque at output
+        const tLoss = -ep.pFixed / Math.abs(outputSpeed);
+        return { output: tLoss };
+      }
+    }
+
     return {};
+  }
+
+  /**
+   * Update the estimated input torque for efficiency calculations.
+   * Called by the drivetrain during torque resolution.
+   */
+  setInputTorque(torque: number): void {
+    this._lastInputTorque = Math.abs(torque);
   }
 
   computeStateDerivatives(
