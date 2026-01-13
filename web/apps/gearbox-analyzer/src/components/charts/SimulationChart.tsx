@@ -1,8 +1,4 @@
-
-import dynamic from "next/dynamic";
-
-// Dynamically import Plotly to avoid SSR issues
-const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
+import Plot from "react-plotly.js";
 
 interface SimulationChartProps {
   time: number[];

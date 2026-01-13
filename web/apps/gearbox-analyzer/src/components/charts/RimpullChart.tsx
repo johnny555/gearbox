@@ -1,9 +1,5 @@
-
-import dynamic from "next/dynamic";
+import Plot from "react-plotly.js";
 import type { RimpullCurve } from "@/stores/simulation-store";
-
-// Dynamically import Plotly to avoid SSR issues
-const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 interface RimpullChartProps {
   curves: RimpullCurve[];

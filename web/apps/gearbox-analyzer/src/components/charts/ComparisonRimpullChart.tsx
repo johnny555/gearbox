@@ -1,8 +1,5 @@
-
-import dynamic from "next/dynamic";
+import Plot from "react-plotly.js";
 import type { ComparisonResult, RimpullCurve, RimpullPoint } from "@/stores/simulation-store";
-
-const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 interface ComparisonRimpullChartProps {
   results: ComparisonResult[];
