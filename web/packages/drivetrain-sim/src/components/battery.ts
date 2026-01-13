@@ -143,6 +143,7 @@ export const EV_BATTERY_PARAMS: BatteryParams = {
  * Power limits are derated near SOC boundaries to protect the battery.
  */
 export class BatteryComponent extends DrivetrainComponent {
+  readonly componentType = 'battery' as const;
   readonly params: Required<Omit<BatteryParams, 'ocvParams' | 'resistanceParams'>> & {
     ocvParams: Required<BatteryOcvParams>;
     resistanceParams: Required<BatteryResistanceParams>;

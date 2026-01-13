@@ -91,6 +91,7 @@ export const SINGLE_SPEED_PARAMS: GearboxParams = {
  * Features variable efficiency based on speed and load when enabled.
  */
 export class NSpeedGearboxComponent extends DrivetrainComponent {
+  readonly componentType = 'gearbox' as const;
   readonly params: Required<Omit<GearboxParams, 'efficiencyParams'>> & {
     efficiencyParams: Required<GearboxEfficiencyParams>;
   };

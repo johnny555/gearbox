@@ -75,7 +75,7 @@ export class ConventionalDieselController extends DrivetrainController {
   readonly engineName: string;
   readonly gearboxName: string;
   readonly Kp: number;
-  shiftSchedule: GearShiftSchedule;
+  shiftSchedule!: GearShiftSchedule;
   private _currentGear: number = 0;
   private _engine: any;
   private _gearbox: any;

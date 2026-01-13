@@ -116,6 +116,7 @@ export const MG2_PARAMS: MotorParams = {
  * Can operate in all four quadrants (motoring/generating in both directions).
  */
 export class MotorComponent extends DrivetrainComponent {
+  readonly componentType = 'motor' as const;
   readonly params: Required<Omit<MotorParams, 'pBoost' | 'lossParams'>> & {
     pBoost: number | null;
     lossParams: Required<MotorLossParams>;

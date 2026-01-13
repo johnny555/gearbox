@@ -77,6 +77,7 @@ export const CAT_793D_POOR_ROAD: VehicleParams = {
  * - Aero: F_aero = 0.5 * rho * C_d * A * v^2
  */
 export class VehicleComponent extends DrivetrainComponent {
+  readonly componentType = 'vehicle' as const;
   readonly params: Required<VehicleParams>;
   private _payloadFraction: number;
   private _mass: number;

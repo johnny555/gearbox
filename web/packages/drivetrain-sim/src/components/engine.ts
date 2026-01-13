@@ -106,6 +106,7 @@ export const CAT_3516E_PARAMS: EngineParams = {
  * Features variable BSFC based on speed and load when enabled.
  */
 export class EngineComponent extends DrivetrainComponent {
+  readonly componentType = 'engine' as const;
   readonly params: Required<Omit<EngineParams, 'bsfcParams'>> & {
     bsfcParams: Required<BsfcMapParams>;
   };

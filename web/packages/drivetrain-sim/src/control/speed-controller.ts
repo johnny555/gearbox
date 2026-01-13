@@ -26,7 +26,7 @@ export interface TorqueAllocation {
 export class SpeedController extends DrivetrainController {
   readonly Kp: number;
   readonly Ki: number;
-  allocation: TorqueAllocation;
+  allocation!: TorqueAllocation;
   private _integral: number = 0;
   private _gearboxName: string | null = null;
   private _currentGear: number = 0;
@@ -59,13 +59,12 @@ export class SpeedController extends DrivetrainController {
 
     const components = this.drivetrain.topology.components;
 
-    // Find all engines and motors
+    // Find all engines and motors using componentType (survives minification)
     for (const [name, comp] of components) {
-      const compType = comp.constructor.name;
-      if (compType.includes('Engine')) {
+      if (comp.componentType === 'engine') {
         actuators.push(name);
         isEngine.push(true);
-      } else if (compType.includes('Motor')) {
+      } else if (comp.componentType === 'motor') {
         actuators.push(name);
         isEngine.push(false);
       }
@@ -86,7 +85,7 @@ export class SpeedController extends DrivetrainController {
 
   private _findGearbox(): string | null {
     for (const [name, comp] of this.drivetrain.topology.components) {
-      if (comp.constructor.name.includes('Gearbox') && 'nGears' in comp) {
+      if (comp.componentType === 'gearbox' && 'nGears' in comp) {
         if ((comp as any).nGears > 1) {
           return name;
         }

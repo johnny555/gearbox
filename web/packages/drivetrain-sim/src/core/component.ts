@@ -13,6 +13,11 @@ export interface PortValues {
 }
 
 /**
+ * Component type identifiers (survives minification).
+ */
+export type ComponentType = 'engine' | 'motor' | 'gearbox' | 'planetary' | 'battery' | 'vehicle' | 'generic';
+
+/**
  * Abstract base class for drivetrain components.
  *
  * Components represent physical elements like engines, motors, gearboxes, etc.
@@ -24,6 +29,8 @@ export interface PortValues {
  */
 export abstract class DrivetrainComponent {
   protected _name: string;
+  /** Component type identifier (survives minification) */
+  abstract readonly componentType: ComponentType;
 
   constructor(name: string = 'component') {
     this._name = name;

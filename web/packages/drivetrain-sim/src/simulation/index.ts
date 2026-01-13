@@ -47,7 +47,7 @@ export {
   integrateFixed,
 } from './integrator';
 
-export type { ControlFunction, GradeFunction, DrivetrainController } from './simulator';
+export type { ControlFunction, GradeFunction } from './simulator';
 export {
   DrivetrainSimulator,
   simulate,

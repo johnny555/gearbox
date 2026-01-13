@@ -53,6 +53,7 @@ export const CAT_793D_PLANETARY_PARAMS: PlanetaryGearParams = {
  * Torque balance: τ_sun : τ_carrier : τ_ring = 1 : -(1+ρ) : ρ
  */
 export class PlanetaryGearComponent extends DrivetrainComponent {
+  readonly componentType = 'planetary' as const;
   readonly params: Required<PlanetaryGearParams>;
   private _rho: number;
 
