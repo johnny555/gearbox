@@ -2,7 +2,7 @@
 import { useCallback } from "react";
 import { type Node, type Edge } from "@xyflow/react";
 import type { BaseNodeData } from "@/stores/drivetrain-store";
-import { useSimulationStore, type SimResult, type RimpullCurve, type RimpullPoint, type OperatingCurve, type OperatingPoint } from "@/stores/simulation-store";
+import { useSimulationStore, type SimResult, type RimpullCurve, type RimpullPoint, type OperatingCurve, type OperatingPoint, type DrivetrainMetadata } from "@/stores/simulation-store";
 
 import {
   DrivetrainTopology,
@@ -31,7 +31,20 @@ const HANDLE_TO_PORT: Record<string, Record<string, string>> = {
 };
 
 /**
+ * Default inertia values used when params don't specify them.
+ * These are fallbacks for backward compatibility with older saved configurations.
+ */
+const DEFAULT_INERTIAS = {
+  engine: { jEngine: 25 },       // kg*m^2 - large diesel engine
+  motor: { jRotor: 5 },          // kg*m^2 - industrial motor
+  gearbox: { jInput: 5, jOutput: 10 },
+  planetary: { jSun: 2, jCarrier: 50, jRing: 5 },
+  vehicle: { jWheels: 500, cD: 0.9, aFrontal: 45.0 },
+};
+
+/**
  * Create a component instance from node data.
+ * Uses parameters from the node data, falling back to defaults for missing values.
  */
 function createComponent(
   nodeData: BaseNodeData
@@ -42,7 +55,8 @@ function createComponent(
     switch (componentType) {
       case "engine": {
         return new EngineComponent({
-          jEngine: 200,
+          // Use param if provided, otherwise use default
+          jEngine: (params.jEngine as number) ?? DEFAULT_INERTIAS.engine.jEngine,
           rpmIdle: params.rpmIdle as number,
           rpmMax: params.rpmMax as number,
           pRated: params.pRated as number,
@@ -52,7 +66,7 @@ function createComponent(
 
       case "motor": {
         return new MotorComponent({
-          jRotor: 10,
+          jRotor: (params.jRotor as number) ?? DEFAULT_INERTIAS.motor.jRotor,
           pMax: params.pMax as number,
           tMax: params.tMax as number,
           rpmMax: params.rpmMax as number,
@@ -66,8 +80,8 @@ function createComponent(
         return new NSpeedGearboxComponent({
           ratios: ratios,
           efficiencies: efficiencies,
-          jInput: 50,
-          jOutput: 100,
+          jInput: (params.jInput as number) ?? DEFAULT_INERTIAS.gearbox.jInput,
+          jOutput: (params.jOutput as number) ?? DEFAULT_INERTIAS.gearbox.jOutput,
         });
       }
 
@@ -75,9 +89,9 @@ function createComponent(
         return new PlanetaryGearComponent({
           zSun: params.zSun as number,
           zRing: params.zRing as number,
-          jSun: 5,
-          jCarrier: 150,
-          jRing: 10,
+          jSun: (params.jSun as number) ?? DEFAULT_INERTIAS.planetary.jSun,
+          jCarrier: (params.jCarrier as number) ?? DEFAULT_INERTIAS.planetary.jCarrier,
+          jRing: (params.jRing as number) ?? DEFAULT_INERTIAS.planetary.jRing,
         });
       }
 
@@ -97,9 +111,11 @@ function createComponent(
           mPayload: params.mPayload as number,
           rWheel: params.rWheel as number,
           cR: params.cR as number,
-          rhoAir: 1.225,
-          cD: 0.8,
-          aFrontal: 50,
+          // Use params if provided, otherwise use defaults
+          rhoAir: 1.225, // Standard air density - rarely needs to change
+          cD: (params.cD as number) ?? DEFAULT_INERTIAS.vehicle.cD,
+          aFrontal: (params.aFrontal as number) ?? DEFAULT_INERTIAS.vehicle.aFrontal,
+          jWheels: (params.jWheels as number) ?? DEFAULT_INERTIAS.vehicle.jWheels,
         });
       }
 
@@ -979,6 +995,24 @@ export function useSimulation() {
 
         console.log("Matched keys:", { velocityKey, fuelRateKey, enginePowerKey, motorPowerKey });
 
+        // Build drivetrain metadata for UI visibility
+        const metadata: DrivetrainMetadata = {
+          nMechanicalDofs: drivetrain.nMechanicalDofs,
+          nInternalStates: drivetrain.nInternalStates,
+          nTotalStates: drivetrain.nStates,
+          stateNames: drivetrain.stateNames,
+          controlNames: drivetrain.controlNames,
+          components: Array.from(drivetrain.topology.components.keys()),
+        };
+
+        console.log("Drivetrain metadata:", {
+          mechanicalDOFs: metadata.nMechanicalDofs,
+          internalStates: metadata.nInternalStates,
+          totalStates: metadata.nTotalStates,
+          states: metadata.stateNames,
+          controls: metadata.controlNames,
+        });
+
         const simResult: SimResult = {
           time: result.time,
           velocity: velocityKey ? result.outputs[velocityKey] : [],
@@ -986,6 +1020,7 @@ export function useSimulation() {
           fuelRate: fuelRateKey ? result.outputs[fuelRateKey] : undefined,
           enginePower: enginePowerKey ? result.outputs[enginePowerKey] : undefined,
           motorPower: motorPowerKey ? result.outputs[motorPowerKey] : undefined,
+          metadata,
         };
 
         // Check for SOC in states
@@ -1004,6 +1039,7 @@ export function useSimulation() {
           hasEnginePower: !!simResult.enginePower,
           hasMotorPower: !!simResult.motorPower,
           hasSOC: !!simResult.soc,
+          metadata: simResult.metadata,
         });
 
         setResult(simResult);

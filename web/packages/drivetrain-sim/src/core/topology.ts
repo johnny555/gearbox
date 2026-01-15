@@ -220,6 +220,97 @@ export class DrivetrainTopology {
   }
 
   /**
+   * Get all MECHANICAL connections involving a component.
+   * Filters out electrical connections.
+   */
+  getMechanicalConnectionsFor(component: string): Connection[] {
+    return this.connections.filter((c) => {
+      if (c.fromComponent !== component && c.toComponent !== component) {
+        return false;
+      }
+      // Check if this is a mechanical connection
+      const comp = this.components.get(c.fromComponent);
+      if (!comp) return false;
+      const port = comp.getPort(c.fromPort);
+      return port?.portType === PortType.MECHANICAL;
+    });
+  }
+
+  /**
+   * Check if there's a mechanical path from a component to the output.
+   * Uses BFS to traverse the mechanical connection graph.
+   */
+  hasMechanicalPathToOutput(startComponent: string): boolean {
+    if (this.outputComponent === null) {
+      return false;
+    }
+
+    if (startComponent === this.outputComponent) {
+      return true;
+    }
+
+    const visited = new Set<string>();
+    const queue: string[] = [startComponent];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      const connections = this.getMechanicalConnectionsFor(current);
+      for (const conn of connections) {
+        const neighbor =
+          conn.fromComponent === current ? conn.toComponent : conn.fromComponent;
+
+        if (neighbor === this.outputComponent) {
+          return true;
+        }
+
+        if (!visited.has(neighbor)) {
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get all components reachable via mechanical connections from the output.
+   * Returns the set of component names on the mechanical path.
+   */
+  getConnectedMechanicalComponents(): Set<string> {
+    const connected = new Set<string>();
+
+    if (this.outputComponent === null) {
+      return connected;
+    }
+
+    const queue: string[] = [this.outputComponent];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (connected.has(current)) {
+        continue;
+      }
+      connected.add(current);
+
+      const connections = this.getMechanicalConnectionsFor(current);
+      for (const conn of connections) {
+        const neighbor =
+          conn.fromComponent === current ? conn.toComponent : conn.fromComponent;
+        if (!connected.has(neighbor)) {
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    return connected;
+  }
+
+  /**
    * Find what a port is connected to.
    *
    * @returns [component_name, port_name] or null if not connected
@@ -247,6 +338,7 @@ export class DrivetrainTopology {
     // Check that we have at least one component
     if (this.components.size === 0) {
       errors.push('Topology has no components');
+      return errors; // Can't continue validation without components
     }
 
     // Validate each component
@@ -260,9 +352,10 @@ export class DrivetrainTopology {
     // Check that output is set
     if (this.outputComponent === null) {
       errors.push('No output port set (use setOutput())');
+      return errors; // Can't validate paths without output
     }
 
-    // Check for disconnected components
+    // Check for disconnected components (basic check)
     const connectedComponents = new Set<string>();
     for (const conn of this.connections) {
       connectedComponents.add(conn.fromComponent);
@@ -275,6 +368,69 @@ export class DrivetrainTopology {
         const mechPorts = component.getMechanicalPorts();
         if (Object.keys(mechPorts).length > 0) {
           errors.push(`Component '${name}' is not connected to anything`);
+        }
+      }
+    }
+
+    // Find all actuators (engines and motors)
+    const actuators: string[] = [];
+    for (const [name, component] of this.components) {
+      if (component.componentType === 'engine' || component.componentType === 'motor') {
+        actuators.push(name);
+      }
+    }
+
+    // Check that at least one actuator exists
+    if (actuators.length === 0) {
+      errors.push('Topology needs at least one actuator (engine or motor)');
+    }
+
+    // Check that at least one actuator has a mechanical path to the output
+    let hasPathToOutput = false;
+    const actuatorsWithoutPath: string[] = [];
+
+    for (const actuatorName of actuators) {
+      if (this.hasMechanicalPathToOutput(actuatorName)) {
+        hasPathToOutput = true;
+      } else {
+        actuatorsWithoutPath.push(actuatorName);
+      }
+    }
+
+    if (!hasPathToOutput && actuators.length > 0) {
+      errors.push(
+        `No mechanical path from any actuator to output '${this.outputComponent}.${this.outputPort}'. ` +
+        `Disconnected actuators: ${actuatorsWithoutPath.join(', ')}`
+      );
+    } else if (actuatorsWithoutPath.length > 0) {
+      // Warn about actuators that aren't connected to the output
+      // This could be intentional (e.g., a generator that's only electrically connected)
+      // but we should still flag it
+      for (const name of actuatorsWithoutPath) {
+        const component = this.components.get(name)!;
+        const mechPorts = component.getMechanicalPorts();
+        if (Object.keys(mechPorts).length > 0) {
+          errors.push(
+            `Actuator '${name}' has no mechanical path to output - ` +
+            `will not contribute to vehicle motion`
+          );
+        }
+      }
+    }
+
+    // Check that all mechanical components are reachable from the output
+    // Components not on the mechanical path will have independent DOFs that don't affect vehicle
+    const reachableFromOutput = this.getConnectedMechanicalComponents();
+
+    for (const [name, component] of this.components) {
+      const mechPorts = component.getMechanicalPorts();
+      if (Object.keys(mechPorts).length > 0 && !reachableFromOutput.has(name)) {
+        // Only error if it's connected to something but not to the output path
+        if (connectedComponents.has(name)) {
+          errors.push(
+            `Component '${name}' is mechanically connected but not on the path to output - ` +
+            `this will create an independent DOF that doesn't affect vehicle motion`
+          );
         }
       }
     }

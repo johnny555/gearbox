@@ -14,6 +14,25 @@ export interface SimConfig {
 }
 
 /**
+ * Drivetrain metadata from compilation.
+ * Provides visibility into the internal structure of the compiled drivetrain.
+ */
+export interface DrivetrainMetadata {
+  /** Number of independent mechanical degrees of freedom */
+  nMechanicalDofs: number;
+  /** Number of internal states (e.g., battery SOC) */
+  nInternalStates: number;
+  /** Total number of state variables */
+  nTotalStates: number;
+  /** Names of all state variables */
+  stateNames: string[];
+  /** Names of control inputs */
+  controlNames: string[];
+  /** Components in the drivetrain */
+  components: string[];
+}
+
+/**
  * Simulation result data.
  */
 export interface SimResult {
@@ -24,6 +43,8 @@ export interface SimResult {
   soc?: number[];
   enginePower?: number[];
   motorPower?: number[];
+  /** Drivetrain structure metadata - useful for debugging */
+  metadata?: DrivetrainMetadata;
 }
 
 /**

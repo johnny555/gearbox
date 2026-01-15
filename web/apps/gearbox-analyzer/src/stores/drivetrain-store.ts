@@ -118,26 +118,38 @@ interface DrivetrainState {
 }
 
 // Default parameters for each component type
+// Includes inertias and physical parameters that affect simulation dynamics
 const DEFAULT_PARAMS: Record<ComponentType, Record<string, unknown>> = {
   engine: {
     rpmIdle: 700,
     rpmMax: 1800,
     pRated: 1801000,
     tPeak: 11220,
+    // Rotational inertia [kg*m^2] - typical for large diesel engine
+    jEngine: 25,
   },
   motor: {
     pMax: 200000,
     tMax: 3000,
     rpmMax: 6000,
     eta: 0.92,
+    // Rotor inertia [kg*m^2] - typical for industrial motor
+    jRotor: 5,
   },
   gearbox: {
     ratios: [4.59, 2.95, 1.94, 1.40, 1.0, 0.74, 0.65],
     efficiencies: [0.97, 0.97, 0.97, 0.97, 0.97, 0.97, 0.97],
+    // Input and output shaft inertias [kg*m^2]
+    jInput: 5,
+    jOutput: 10,
   },
   planetary: {
     zSun: 30,
     zRing: 90,
+    // Planetary gear inertias [kg*m^2]
+    jSun: 2,
+    jCarrier: 50,
+    jRing: 5,
   },
   battery: {
     capacityKwh: 200,
@@ -152,6 +164,11 @@ const DEFAULT_PARAMS: Record<ComponentType, Record<string, unknown>> = {
     rWheel: 1.78,
     cR: 0.025,
     vMax: 15.0,
+    // Aerodynamic parameters
+    cD: 0.9,        // Drag coefficient for mining truck
+    aFrontal: 45.0, // Frontal area [m^2]
+    // Wheel inertia [kg*m^2]
+    jWheels: 500,
   },
 };
 
@@ -256,22 +273,130 @@ export const useDrivetrainStore = create<DrivetrainState>((set, get) => ({
     const errors: string[] = [];
 
     // Check for at least one engine or motor
-    const hasActuator = nodes.some(
+    const actuators = nodes.filter(
       (n) => n.data.componentType === "engine" || n.data.componentType === "motor"
     );
-    if (!hasActuator) {
+    if (actuators.length === 0) {
       errors.push("Topology needs at least one engine or motor");
     }
 
     // Check for vehicle component
-    const hasVehicle = nodes.some((n) => n.data.componentType === "vehicle");
-    if (!hasVehicle) {
+    const vehicleNode = nodes.find((n) => n.data.componentType === "vehicle");
+    if (!vehicleNode) {
       errors.push("Topology needs a vehicle component");
     }
 
-    // Check connectivity (simplified)
-    if (nodes.length > 1 && edges.length < nodes.length - 1) {
-      errors.push("Some components are not connected");
+    // Build adjacency list for mechanical connections only
+    // (skip electrical edges)
+    const adjacency = new Map<string, Set<string>>();
+    for (const node of nodes) {
+      adjacency.set(node.id, new Set());
+    }
+
+    for (const edge of edges) {
+      // Skip electrical connections (they don't form the mechanical drive chain)
+      if (edge.type === "electrical") continue;
+
+      const fromSet = adjacency.get(edge.source);
+      const toSet = adjacency.get(edge.target);
+      if (fromSet) fromSet.add(edge.target);
+      if (toSet) toSet.add(edge.source);
+    }
+
+    // BFS to find all nodes reachable from vehicle via mechanical connections
+    const reachableFromVehicle = new Set<string>();
+    if (vehicleNode) {
+      const queue: string[] = [vehicleNode.id];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (reachableFromVehicle.has(current)) continue;
+        reachableFromVehicle.add(current);
+
+        const neighbors = adjacency.get(current);
+        if (neighbors) {
+          for (const neighbor of neighbors) {
+            if (!reachableFromVehicle.has(neighbor)) {
+              queue.push(neighbor);
+            }
+          }
+        }
+      }
+    }
+
+    // Check that at least one actuator can reach the vehicle
+    if (vehicleNode && actuators.length > 0) {
+      const connectedActuators = actuators.filter((a) =>
+        reachableFromVehicle.has(a.id)
+      );
+
+      if (connectedActuators.length === 0) {
+        const actuatorNames = actuators
+          .map((a) => a.data.label || a.id)
+          .join(", ");
+        errors.push(
+          `No mechanical path from actuators (${actuatorNames}) to vehicle. ` +
+          `Check that all components in the drive chain are connected.`
+        );
+      }
+
+      // Warn about disconnected actuators
+      const disconnectedActuators = actuators.filter(
+        (a) => !reachableFromVehicle.has(a.id)
+      );
+      for (const actuator of disconnectedActuators) {
+        const name = actuator.data.label || actuator.id;
+        // Only warn if we have at least one connected actuator
+        if (connectedActuators.length > 0) {
+          errors.push(
+            `Actuator "${name}" has no mechanical path to vehicle - ` +
+            `it will not contribute to vehicle motion`
+          );
+        }
+      }
+    }
+
+    // Check for completely isolated nodes (not connected to anything)
+    for (const node of nodes) {
+      const neighbors = adjacency.get(node.id);
+      const hasElectricalOnly =
+        node.data.componentType === "battery" ||
+        edges.some(
+          (e) =>
+            e.type === "electrical" &&
+            (e.source === node.id || e.target === node.id)
+        );
+
+      // Skip battery-only nodes - they may only have electrical connections
+      if (hasElectricalOnly && node.data.componentType === "battery") continue;
+
+      if (nodes.length > 1 && (!neighbors || neighbors.size === 0)) {
+        const name = node.data.label || node.id;
+        errors.push(`Component "${name}" is not connected to anything`);
+      }
+    }
+
+    // Check for mechanical components not on the path to vehicle
+    if (vehicleNode) {
+      for (const node of nodes) {
+        // Skip battery (electrical only) and vehicle itself
+        if (
+          node.data.componentType === "battery" ||
+          node.id === vehicleNode.id
+        )
+          continue;
+
+        const neighbors = adjacency.get(node.id);
+        const isConnected = neighbors && neighbors.size > 0;
+        const isReachable = reachableFromVehicle.has(node.id);
+
+        if (isConnected && !isReachable) {
+          const name = node.data.label || node.id;
+          errors.push(
+            `Component "${name}" is connected but not on the path to vehicle - ` +
+            `this creates an independent system that won't affect vehicle motion`
+          );
+        }
+      }
     }
 
     return {
