@@ -1,0 +1,287 @@
+{
+  "willis_equation": [
+    {
+      "input": {
+        "rho": 2.6,
+        "omega_carrier": 104.72,
+        "omega_ring": 0.0
+      },
+      "sun_speed": 376.992,
+      "carrier_speed_verify": 104.72,
+      "ring_speed_verify": 0.0,
+      "torque_ratios": [
+        1.0,
+        -3.6,
+        2.6
+      ],
+      "inertia_coefficients": [
+        12.96,
+        -9.360000000000001,
+        6.760000000000001
+      ]
+    },
+    {
+      "input": {
+        "rho": 2.6,
+        "omega_carrier": 244.35,
+        "omega_ring": 302.24
+      },
+      "sun_speed": 93.8359999999999,
+      "carrier_speed_verify": 244.35,
+      "ring_speed_verify": 302.24,
+      "torque_ratios": [
+        1.0,
+        -3.6,
+        2.6
+      ],
+      "inertia_coefficients": [
+        12.96,
+        -9.360000000000001,
+        6.760000000000001
+      ]
+    },
+    {
+      "input": {
+        "rho": 3.0,
+        "omega_carrier": 125.66,
+        "omega_ring": 0.0
+      },
+      "sun_speed": 502.64,
+      "carrier_speed_verify": 125.66,
+      "ring_speed_verify": 0.0,
+      "torque_ratios": [
+        1.0,
+        -4.0,
+        3.0
+      ],
+      "inertia_coefficients": [
+        16.0,
+        -12.0,
+        9.0
+      ]
+    },
+    {
+      "input": {
+        "rho": 3.0,
+        "omega_carrier": 125.66,
+        "omega_ring": 50.0
+      },
+      "sun_speed": 352.64,
+      "carrier_speed_verify": 125.66,
+      "ring_speed_verify": 50.0,
+      "torque_ratios": [
+        1.0,
+        -4.0,
+        3.0
+      ],
+      "inertia_coefficients": [
+        16.0,
+        -12.0,
+        9.0
+      ]
+    }
+  ],
+  "gear_ratio": [
+    {
+      "input": {
+        "ratio": 2.0,
+        "omega_in": 100.0
+      },
+      "omega_out": 50.0,
+      "torque_in_for_100Nm_out": 52.631578947368425,
+      "reflected_inertia_for_1000kgm2": 250.0,
+      "speed_relation": {
+        "input": -0.5,
+        "output": 1.0
+      }
+    },
+    {
+      "input": {
+        "ratio": 9.0,
+        "omega_in": 50.0
+      },
+      "omega_out": 5.555555555555555,
+      "torque_in_for_100Nm_out": 11.69590643274854,
+      "reflected_inertia_for_1000kgm2": 12.345679012345679,
+      "speed_relation": {
+        "input": -0.1111111111111111,
+        "output": 1.0
+      }
+    },
+    {
+      "input": {
+        "ratio": 18.0,
+        "omega_in": 125.66
+      },
+      "omega_out": 6.981111111111111,
+      "torque_in_for_100Nm_out": 5.84795321637427,
+      "reflected_inertia_for_1000kgm2": 3.0864197530864197,
+      "speed_relation": {
+        "input": -0.05555555555555555,
+        "output": 1.0
+      }
+    }
+  ],
+  "road_load": [
+    {
+      "input": {
+        "velocity": 0.0,
+        "grade": 0.0
+      },
+      "mass": 383600.0,
+      "F_total": 94077.90000000001,
+      "F_grade": 0.0,
+      "F_roll": 94077.90000000001,
+      "F_aero": 0.0,
+      "T_wheel": 167458.662
+    },
+    {
+      "input": {
+        "velocity": 5.0,
+        "grade": 0.0
+      },
+      "mass": 383600.0,
+      "F_total": 94698.05625000001,
+      "F_grade": 0.0,
+      "F_roll": 94077.90000000001,
+      "F_aero": 620.15625,
+      "T_wheel": 168562.54012500003
+    },
+    {
+      "input": {
+        "velocity": 5.0,
+        "grade": 0.1
+      },
+      "mass": 383600.0,
+      "F_total": 468675.2026342817,
+      "F_grade": 374444.0371074254,
+      "F_roll": 93611.00927685635,
+      "F_aero": 620.15625,
+      "T_wheel": 834241.8606890214
+    },
+    {
+      "input": {
+        "velocity": 10.0,
+        "grade": 0.1
+      },
+      "mass": 383600.0,
+      "F_total": 470535.6713842817,
+      "F_grade": 374444.0371074254,
+      "F_roll": 93611.00927685635,
+      "F_aero": 2480.625,
+      "T_wheel": 837553.4950640214
+    },
+    {
+      "input": {
+        "velocity": 15.0,
+        "grade": 0.0
+      },
+      "mass": 383600.0,
+      "F_total": 99659.30625000001,
+      "F_grade": 0.0,
+      "F_roll": 94077.90000000001,
+      "F_aero": 5581.406250000001,
+      "T_wheel": 177393.56512500002
+    }
+  ],
+  "torque_split": [
+    {
+      "input": {
+        "Z_sun": 30,
+        "Z_ring": 78,
+        "T_carrier": 100.0
+      },
+      "rho": 2.6,
+      "T_sun": -27.77777777777778,
+      "T_ring": -72.22222222222223,
+      "torque_balance_error": 0.0,
+      "sun_fraction": 0.2777777777777778,
+      "ring_fraction": 0.7222222222222223
+    },
+    {
+      "input": {
+        "Z_sun": 30,
+        "Z_ring": 90,
+        "T_carrier": 100.0
+      },
+      "rho": 3.0,
+      "T_sun": -25.0,
+      "T_ring": -75.0,
+      "torque_balance_error": 0.0,
+      "sun_fraction": 0.25,
+      "ring_fraction": 0.75
+    },
+    {
+      "input": {
+        "Z_sun": 30,
+        "Z_ring": 90,
+        "T_carrier": 11220.0
+      },
+      "rho": 3.0,
+      "T_sun": -2805.0,
+      "T_ring": -8415.0,
+      "torque_balance_error": 0.0,
+      "sun_fraction": 0.25,
+      "ring_fraction": 0.75
+    }
+  ],
+  "inertia_coefficients": [
+    {
+      "input": {
+        "rho": 2.6,
+        "J_sun": 0.5
+      },
+      "J_cc": 6.48,
+      "J_cr": -4.680000000000001,
+      "J_rr": 3.3800000000000003,
+      "J_matrix": [
+        [
+          6.48,
+          -4.680000000000001
+        ],
+        [
+          -4.680000000000001,
+          3.3800000000000003
+        ]
+      ]
+    },
+    {
+      "input": {
+        "rho": 3.0,
+        "J_sun": 0.5
+      },
+      "J_cc": 8.0,
+      "J_cr": -6.0,
+      "J_rr": 4.5,
+      "J_matrix": [
+        [
+          8.0,
+          -6.0
+        ],
+        [
+          -6.0,
+          4.5
+        ]
+      ]
+    },
+    {
+      "input": {
+        "rho": 3.0,
+        "J_sun": 10.0
+      },
+      "J_cc": 160.0,
+      "J_cr": -120.0,
+      "J_rr": 90.0,
+      "J_matrix": [
+        [
+          160.0,
+          -120.0
+        ],
+        [
+          -120.0,
+          90.0
+        ]
+      ]
+    }
+  ]
+}

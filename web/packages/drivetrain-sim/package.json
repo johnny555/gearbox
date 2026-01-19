@@ -14,7 +14,9 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "cross-validate": "../../../scripts/cross-validate.sh"
   },
   "devDependencies": {
     "typescript": "^5.3.0",

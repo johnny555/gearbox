@@ -1,0 +1,330 @@
+{
+  "$schema": "./test-vectors.schema.json",
+  "version": "1.0.0",
+  "description": "Shared test vectors for Python/TypeScript drivetrain simulation cross-validation",
+  "generated_by": "python",
+  "generated_at": "2026-01-19T04:47:22.526430+00:00",
+  "tolerance": {
+    "default": 1e-10,
+    "integration": 1e-06
+  },
+  "test_suites": {
+    "willis_equation": {
+      "description": "Willis equation: \u03c9_sun = (1+\u03c1)\u00d7\u03c9_carrier - \u03c1\u00d7\u03c9_ring",
+      "test_cases": [
+        {
+          "id": "willis_prius_standstill",
+          "description": "Prius at standstill (1000 rpm engine)",
+          "input": {
+            "rho": 2.6,
+            "omega_carrier": 104.72,
+            "omega_ring": 0.0
+          },
+          "expected": {
+            "omega_sun": 376.992
+          }
+        },
+        {
+          "id": "willis_prius_highway",
+          "description": "Prius at highway speed (2333 rpm, 80 km/h)",
+          "input": {
+            "rho": 2.6,
+            "omega_carrier": 244.35,
+            "omega_ring": 302.24
+          },
+          "expected": {
+            "omega_sun": 93.8359999999999
+          }
+        },
+        {
+          "id": "willis_cat793d_standstill",
+          "description": "CAT 793D at standstill (1200 rpm engine)",
+          "input": {
+            "rho": 3.0,
+            "omega_carrier": 125.66,
+            "omega_ring": 0.0
+          },
+          "expected": {
+            "omega_sun": 502.64
+          }
+        },
+        {
+          "id": "willis_cat793d_moving",
+          "description": "CAT 793D moving",
+          "input": {
+            "rho": 3.0,
+            "omega_carrier": 125.66,
+            "omega_ring": 50.0
+          },
+          "expected": {
+            "omega_sun": 352.64
+          }
+        }
+      ]
+    },
+    "torque_ratios": {
+      "description": "Planetary gear torque ratios: 1 : -(1+\u03c1) : \u03c1",
+      "test_cases": [
+        {
+          "id": "torque_prius",
+          "description": "Prius planetary (\u03c1=2.6)",
+          "input": {
+            "rho": 2.6
+          },
+          "expected": {
+            "sun_ratio": 1.0,
+            "carrier_ratio": -3.6,
+            "ring_ratio": 2.6
+          }
+        },
+        {
+          "id": "torque_cat793d",
+          "description": "CAT 793D planetary (\u03c1=3.0)",
+          "input": {
+            "rho": 3.0
+          },
+          "expected": {
+            "sun_ratio": 1.0,
+            "carrier_ratio": -4.0,
+            "ring_ratio": 3.0
+          }
+        }
+      ]
+    },
+    "inertia_coefficients": {
+      "description": "Inertia coupling coefficients for Willis constraint elimination",
+      "test_cases": [
+        {
+          "id": "inertia_prius",
+          "description": "Prius (\u03c1=2.6, J_sun=0.5)",
+          "input": {
+            "rho": 2.6,
+            "j_sun": 0.5
+          },
+          "expected": {
+            "j_cc": 6.48,
+            "j_cr": -4.680000000000001,
+            "j_rr": 3.3800000000000003
+          }
+        },
+        {
+          "id": "inertia_cat793d_small",
+          "description": "CAT 793D (\u03c1=3.0, J_sun=0.5)",
+          "input": {
+            "rho": 3.0,
+            "j_sun": 0.5
+          },
+          "expected": {
+            "j_cc": 8.0,
+            "j_cr": -6.0,
+            "j_rr": 4.5
+          }
+        },
+        {
+          "id": "inertia_cat793d_large",
+          "description": "CAT 793D with large motor (\u03c1=3.0, J_sun=10.0)",
+          "input": {
+            "rho": 3.0,
+            "j_sun": 10.0
+          },
+          "expected": {
+            "j_cc": 160.0,
+            "j_cr": -120.0,
+            "j_rr": 90.0
+          }
+        }
+      ]
+    },
+    "gear_ratio": {
+      "description": "Gear ratio constraint transformations",
+      "test_cases": [
+        {
+          "id": "gear_2to1",
+          "description": "2:1 reduction",
+          "input": {
+            "ratio": 2.0,
+            "efficiency": 0.95,
+            "omega_in": 100.0,
+            "torque_out": 100.0,
+            "j_out": 1000.0
+          },
+          "expected": {
+            "omega_out": 50.0,
+            "torque_in": 52.631578947368425,
+            "j_reflected": 250.0
+          }
+        },
+        {
+          "id": "gear_9to1",
+          "description": "9:1 reduction (final drive)",
+          "input": {
+            "ratio": 9.0,
+            "efficiency": 0.95,
+            "omega_in": 50.0,
+            "torque_out": 100.0,
+            "j_out": 1000.0
+          },
+          "expected": {
+            "omega_out": 5.555555555555555,
+            "torque_in": 11.69590643274854,
+            "j_reflected": 12.345679012345679
+          }
+        },
+        {
+          "id": "gear_18to1",
+          "description": "18:1 total (low gear + final)",
+          "input": {
+            "ratio": 18.0,
+            "efficiency": 0.93,
+            "omega_in": 125.66,
+            "torque_out": 100.0,
+            "j_out": 1000.0
+          },
+          "expected": {
+            "omega_out": 6.981111111111111,
+            "torque_in": 5.973715651135005,
+            "j_reflected": 3.0864197530864197
+          }
+        }
+      ]
+    },
+    "road_load": {
+      "description": "Vehicle road load calculations (CAT 793D fully loaded)",
+      "vehicle_params": {
+        "m_empty": 165600,
+        "m_payload": 218000,
+        "payload_fraction": 1.0,
+        "r_wheel": 1.78,
+        "a_frontal": 45.0,
+        "c_d": 0.9,
+        "c_r": 0.025,
+        "rho_air": 1.225,
+        "g": 9.81
+      },
+      "test_cases": [
+        {
+          "id": "load_standstill_flat",
+          "description": "Standstill on flat ground",
+          "input": {
+            "velocity": 0.0,
+            "grade": 0.0
+          },
+          "expected": {
+            "f_grade": 0.0,
+            "f_roll": 94077.90000000001,
+            "f_aero": 0.0,
+            "f_total": 94077.90000000001,
+            "t_wheel": 167458.662
+          }
+        },
+        {
+          "id": "load_5ms_flat",
+          "description": "5 m/s (~18 km/h) on flat",
+          "input": {
+            "velocity": 5.0,
+            "grade": 0.0
+          },
+          "expected": {
+            "f_grade": 0.0,
+            "f_roll": 94077.90000000001,
+            "f_aero": 620.15625,
+            "f_total": 94698.05625000001,
+            "t_wheel": 168562.54012500003
+          }
+        },
+        {
+          "id": "load_5ms_10grade",
+          "description": "5 m/s on 10% grade",
+          "input": {
+            "velocity": 5.0,
+            "grade": 0.1
+          },
+          "expected": {
+            "f_grade": 374444.0371074254,
+            "f_roll": 93611.00927685635,
+            "f_aero": 620.15625,
+            "f_total": 468675.2026342817,
+            "t_wheel": 834241.8606890214
+          }
+        },
+        {
+          "id": "load_10ms_10grade",
+          "description": "10 m/s on 10% grade",
+          "input": {
+            "velocity": 10.0,
+            "grade": 0.1
+          },
+          "expected": {
+            "f_grade": 374444.0371074254,
+            "f_roll": 93611.00927685635,
+            "f_aero": 2480.625,
+            "f_total": 470535.6713842817,
+            "t_wheel": 837553.4950640214
+          }
+        },
+        {
+          "id": "load_15ms_flat",
+          "description": "15 m/s (~54 km/h) on flat",
+          "input": {
+            "velocity": 15.0,
+            "grade": 0.0
+          },
+          "expected": {
+            "f_grade": 0.0,
+            "f_roll": 94077.90000000001,
+            "f_aero": 5581.406250000001,
+            "f_total": 99659.30625000001,
+            "t_wheel": 177393.56512500002
+          }
+        }
+      ]
+    },
+    "torque_split": {
+      "description": "Planetary gear torque split (efficiency disabled for cross-validation)",
+      "test_cases": [
+        {
+          "id": "split_prius_100",
+          "description": "Prius with 100 Nm carrier torque",
+          "input": {
+            "z_sun": 30,
+            "z_ring": 78,
+            "t_carrier": 100.0
+          },
+          "expected": {
+            "t_sun": -27.77777777777778,
+            "t_ring": -72.22222222222223,
+            "balance_error": 0.0
+          }
+        },
+        {
+          "id": "split_cat793d_100",
+          "description": "CAT 793D with 100 Nm carrier torque",
+          "input": {
+            "z_sun": 30,
+            "z_ring": 90,
+            "t_carrier": 100.0
+          },
+          "expected": {
+            "t_sun": -25.0,
+            "t_ring": -75.0,
+            "balance_error": 0.0
+          }
+        },
+        {
+          "id": "split_cat793d_max",
+          "description": "CAT 793D at max engine torque (11220 Nm)",
+          "input": {
+            "z_sun": 30,
+            "z_ring": 90,
+            "t_carrier": 11220.0
+          },
+          "expected": {
+            "t_sun": -2805.0,
+            "t_ring": -8415.0,
+            "balance_error": 0.0
+          }
+        }
+      ]
+    }
+  }
+}
