@@ -19,3 +19,6 @@ export * from './simulation';
 
 // Control exports
 export * from './control';
+
+// Configuration loading
+export * from './config';

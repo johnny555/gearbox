@@ -26,6 +26,12 @@ import numpy as np
 from gearbox_sim.core.constraints import WillisConstraint, GearRatioConstraint
 from gearbox_sim.components.planetary import PlanetaryGearComponent, PlanetaryGearParams
 from gearbox_sim.components.vehicle import VehicleComponent, VehicleParams
+from gearbox_sim.control.shift_controller import (
+    GearShiftSchedule,
+    SpeedSource,
+    SpeedUnit,
+    LoadBasedHold,
+)
 
 
 def compute_willis_equation(test_case: dict) -> dict:
@@ -158,6 +164,44 @@ def compute_torque_split(test_case: dict) -> dict:
     }
 
 
+def compute_gear_selection(test_case: dict, schedule_config: dict) -> dict:
+    """Compute gear selection expected values."""
+    inp = test_case["input"]
+
+    # Parse load-based hold config
+    load_hold_config = schedule_config.get("load_based_hold", {})
+    load_based_hold = LoadBasedHold(
+        enabled=load_hold_config.get("enabled", False),
+        load_threshold=load_hold_config.get("load_threshold", 0.8),
+        speed_threshold=load_hold_config.get("speed_threshold", 15.0),
+    )
+
+    # Create schedule
+    schedule = GearShiftSchedule(
+        gearbox_id="test",
+        n_gears=schedule_config["n_gears"],
+        upshift_speeds=schedule_config["upshift_speeds"],
+        downshift_speeds=schedule_config["downshift_speeds"],
+        speed_source=SpeedSource(schedule_config.get("speed_source", "vehicle")),
+        speed_unit=SpeedUnit(schedule_config.get("speed_unit", "m/s")),
+        min_gear=schedule_config.get("min_gear", 0),
+        max_gear=schedule_config.get("max_gear"),
+        shift_delay=schedule_config.get("shift_delay", 0.5),
+        load_based_hold=load_based_hold,
+    )
+
+    # Get target gear
+    target_gear = schedule.get_target_gear(
+        current_gear=inp["current_gear"],
+        speed_m_s=inp["speed_m_s"],
+        load_fraction=inp.get("load_fraction", 0.0),
+    )
+
+    return {
+        "target_gear": target_gear,
+    }
+
+
 def generate_test_vectors(input_path: Path, output_path: Path) -> None:
     """Generate test vectors and write to output file."""
     with open(input_path, "r") as f:
@@ -189,6 +233,12 @@ def generate_test_vectors(input_path: Path, output_path: Path) -> None:
     # Torque split
     for tc in suites["torque_split"]["test_cases"]:
         tc["expected"] = compute_torque_split(tc)
+
+    # Gear selection
+    if "gear_selection" in suites:
+        schedule_config = suites["gear_selection"]["schedule_config"]
+        for tc in suites["gear_selection"]["test_cases"]:
+            tc["expected"] = compute_gear_selection(tc, schedule_config)
 
     # Update metadata
     data["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -226,6 +276,18 @@ def validate_python_implementation() -> bool:
     t_sun, t_ring = planetary.calc_torque_split(100.0)
     balance = t_sun + 100.0 + t_ring
     assert abs(balance) < 1e-10, f"Torque balance failed: {balance}"
+
+    # Gear selection sanity check
+    schedule = GearShiftSchedule(
+        gearbox_id="test",
+        n_gears=2,
+        upshift_speeds=[10.0],
+        downshift_speeds=[5.0],
+    )
+    target = schedule.get_target_gear(current_gear=0, speed_m_s=15.0)
+    assert target == 1, f"Gear selection failed: expected 1, got {target}"
+    target = schedule.get_target_gear(current_gear=1, speed_m_s=3.0)
+    assert target == 0, f"Gear selection failed: expected 0, got {target}"
 
     print("Python implementation validated successfully.")
     return True

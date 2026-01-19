@@ -1,0 +1,176 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gearbox-config.schema.json",
+  "title": "Gearbox Configuration",
+  "description": "Unified gearbox configuration for Python/TypeScript drivetrain simulation",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version"
+    },
+    "gearboxes": {
+      "type": "object",
+      "description": "Named gearbox definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/gearbox"
+      }
+    },
+    "shift_schedules": {
+      "type": "object",
+      "description": "Named shift schedule definitions",
+      "additionalProperties": {
+        "$ref": "#/definitions/shift_schedule"
+      }
+    },
+    "drivetrain_configs": {
+      "type": "object",
+      "description": "Complete drivetrain configurations combining gearboxes and schedules",
+      "additionalProperties": {
+        "$ref": "#/definitions/drivetrain_config"
+      }
+    }
+  },
+  "definitions": {
+    "gearbox": {
+      "type": "object",
+      "description": "Single gearbox definition",
+      "required": ["ratios"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable name"
+        },
+        "ratios": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 1,
+          "description": "Gear ratios [K1, K2, ...] where K = omega_in / omega_out"
+        },
+        "efficiencies": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "description": "Efficiency per gear (defaults to 0.97 for all)"
+        },
+        "j_input": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Input shaft inertia [kg·m²]"
+        },
+        "j_output": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Output shaft inertia [kg·m²]"
+        },
+        "shift_time": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time to complete gear shift [s]"
+        },
+        "gear_names": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Human-readable names for each gear"
+        }
+      }
+    },
+    "shift_schedule": {
+      "type": "object",
+      "description": "Shift schedule for automatic gear selection",
+      "required": ["gearbox_id", "upshift_speeds", "downshift_speeds"],
+      "properties": {
+        "gearbox_id": {
+          "type": "string",
+          "description": "Reference to gearbox definition"
+        },
+        "speed_source": {
+          "type": "string",
+          "enum": ["vehicle", "output_shaft", "input_shaft"],
+          "default": "vehicle",
+          "description": "What speed to use for shift decisions"
+        },
+        "speed_unit": {
+          "type": "string",
+          "enum": ["m/s", "km/h", "mph", "rad/s"],
+          "default": "m/s",
+          "description": "Unit for speed thresholds"
+        },
+        "upshift_speeds": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Speed thresholds to upshift (n-1 values for n gears)"
+        },
+        "downshift_speeds": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Speed thresholds to downshift (n-1 values for n gears)"
+        },
+        "min_gear": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Minimum allowed gear index"
+        },
+        "max_gear": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum allowed gear index (defaults to n_gears-1)"
+        },
+        "load_based_hold": {
+          "type": "object",
+          "description": "Hold current gear under high load",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "load_threshold": {
+              "type": "number",
+              "description": "Throttle/load fraction to prevent upshift"
+            },
+            "speed_threshold": {
+              "type": "number",
+              "description": "Speed below which load-hold is active"
+            }
+          }
+        },
+        "shift_delay": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.5,
+          "description": "Minimum time between shifts [s]"
+        }
+      }
+    },
+    "drivetrain_config": {
+      "type": "object",
+      "description": "Complete drivetrain configuration",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "gearbox_chain": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["gearbox_id"],
+            "properties": {
+              "gearbox_id": { "type": "string" },
+              "shift_schedule_id": { "type": "string" },
+              "position": {
+                "type": "string",
+                "enum": ["input", "intermediate", "output"],
+                "description": "Position in drivetrain chain"
+              }
+            }
+          },
+          "description": "Ordered list of gearboxes from input to output"
+        },
+        "final_drive_ratio": {
+          "type": "number",
+          "description": "Final drive ratio (if separate from gearbox chain)"
+        },
+        "wheel_radius": {
+          "type": "number",
+          "description": "Wheel radius [m] for vehicle speed calculation"
+        }
+      }
+    }
+  }
+}

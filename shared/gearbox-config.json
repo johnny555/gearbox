@@ -1,0 +1,175 @@
+{
+  "$schema": "./gearbox-config.schema.json",
+  "version": "1.0.0",
+
+  "gearboxes": {
+    "ecvt_2speed": {
+      "name": "eCVT 2-Speed",
+      "ratios": [2.0, 0.67],
+      "efficiencies": [0.97, 0.97],
+      "j_input": 5.0,
+      "j_output": 5.0,
+      "shift_time": 0.5,
+      "gear_names": ["Low", "High"]
+    },
+
+    "mg1_reduction": {
+      "name": "MG1 Reduction Gear",
+      "ratios": [2.5],
+      "efficiencies": [0.98],
+      "j_input": 1.0,
+      "j_output": 2.0,
+      "gear_names": ["Fixed"]
+    },
+
+    "final_drive_cat793d": {
+      "name": "CAT 793D Final Drive",
+      "ratios": [9.0],
+      "efficiencies": [0.96],
+      "j_input": 2.0,
+      "j_output": 10.0,
+      "gear_names": ["Final"]
+    },
+
+    "diesel_7speed": {
+      "name": "7-Speed Automatic",
+      "ratios": [4.59, 2.95, 1.94, 1.40, 1.0, 0.74, 0.65],
+      "efficiencies": [0.97, 0.97, 0.97, 0.97, 0.97, 0.97, 0.97],
+      "j_input": 5.0,
+      "j_output": 5.0,
+      "shift_time": 0.3,
+      "gear_names": ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th"]
+    },
+
+    "ev_single_speed": {
+      "name": "EV Single Speed Reduction",
+      "ratios": [10.0],
+      "efficiencies": [0.98],
+      "j_input": 2.0,
+      "j_output": 5.0,
+      "gear_names": ["Drive"]
+    }
+  },
+
+  "shift_schedules": {
+    "ecvt_speed_based": {
+      "gearbox_id": "ecvt_2speed",
+      "speed_source": "vehicle",
+      "speed_unit": "km/h",
+      "upshift_speeds": [25],
+      "downshift_speeds": [20],
+      "shift_delay": 1.0,
+      "load_based_hold": {
+        "enabled": true,
+        "load_threshold": 0.8,
+        "speed_threshold": 15
+      }
+    },
+
+    "ecvt_aggressive": {
+      "gearbox_id": "ecvt_2speed",
+      "speed_source": "vehicle",
+      "speed_unit": "km/h",
+      "upshift_speeds": [30],
+      "downshift_speeds": [22],
+      "shift_delay": 0.5,
+      "load_based_hold": {
+        "enabled": false
+      }
+    },
+
+    "ecvt_economy": {
+      "gearbox_id": "ecvt_2speed",
+      "speed_source": "vehicle",
+      "speed_unit": "km/h",
+      "upshift_speeds": [18],
+      "downshift_speeds": [12],
+      "shift_delay": 1.5,
+      "load_based_hold": {
+        "enabled": true,
+        "load_threshold": 0.6,
+        "speed_threshold": 20
+      }
+    },
+
+    "diesel_normal": {
+      "gearbox_id": "diesel_7speed",
+      "speed_source": "vehicle",
+      "speed_unit": "km/h",
+      "upshift_speeds": [15, 25, 40, 55, 70, 85],
+      "downshift_speeds": [10, 20, 30, 45, 60, 75],
+      "shift_delay": 0.5,
+      "load_based_hold": {
+        "enabled": true,
+        "load_threshold": 0.9,
+        "speed_threshold": 30
+      }
+    },
+
+    "diesel_sport": {
+      "gearbox_id": "diesel_7speed",
+      "speed_source": "vehicle",
+      "speed_unit": "km/h",
+      "upshift_speeds": [25, 40, 55, 70, 85, 100],
+      "downshift_speeds": [15, 30, 45, 60, 75, 90],
+      "shift_delay": 0.3,
+      "load_based_hold": {
+        "enabled": false
+      }
+    }
+  },
+
+  "drivetrain_configs": {
+    "cat_793d_ecvt": {
+      "name": "CAT 793D eCVT Hybrid",
+      "description": "Power-split hybrid with 2-speed gearbox and final drive",
+      "gearbox_chain": [
+        {
+          "gearbox_id": "ecvt_2speed",
+          "shift_schedule_id": "ecvt_speed_based",
+          "position": "input"
+        },
+        {
+          "gearbox_id": "final_drive_cat793d",
+          "position": "output"
+        }
+      ],
+      "wheel_radius": 1.78
+    },
+
+    "cat_793d_ecvt_with_mg1_reduction": {
+      "name": "CAT 793D eCVT with MG1 Reduction",
+      "description": "Power-split hybrid with MG1 reduction, 2-speed, and final drive",
+      "gearbox_chain": [
+        {
+          "gearbox_id": "mg1_reduction",
+          "position": "input"
+        },
+        {
+          "gearbox_id": "ecvt_2speed",
+          "shift_schedule_id": "ecvt_speed_based",
+          "position": "intermediate"
+        },
+        {
+          "gearbox_id": "final_drive_cat793d",
+          "position": "output"
+        }
+      ],
+      "wheel_radius": 1.78
+    },
+
+    "conventional_diesel": {
+      "name": "Conventional Diesel 7-Speed",
+      "description": "Traditional diesel with 7-speed automatic",
+      "gearbox_chain": [
+        {
+          "gearbox_id": "diesel_7speed",
+          "shift_schedule_id": "diesel_normal",
+          "position": "input"
+        }
+      ],
+      "final_drive_ratio": 3.5,
+      "wheel_radius": 1.78
+    }
+  }
+}

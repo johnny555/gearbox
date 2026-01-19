@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Shared test vectors for Python/TypeScript drivetrain simulation cross-validation",
   "generated_by": "python",
-  "generated_at": "2026-01-19T04:47:22.526430+00:00",
+  "generated_at": "2026-01-19T07:25:57.219333+00:00",
   "tolerance": {
     "default": 1e-10,
     "integration": 1e-06
@@ -322,6 +322,112 @@
             "t_sun": -2805.0,
             "t_ring": -8415.0,
             "balance_error": 0.0
+          }
+        }
+      ]
+    },
+    "gear_selection": {
+      "description": "Automatic gear selection based on vehicle speed",
+      "schedule_config": {
+        "n_gears": 2,
+        "upshift_speeds": [
+          10.0
+        ],
+        "downshift_speeds": [
+          5.0
+        ],
+        "speed_unit": "m/s",
+        "min_gear": 0,
+        "max_gear": 1,
+        "load_based_hold": {
+          "enabled": true,
+          "load_threshold": 0.8,
+          "speed_threshold": 15.0
+        }
+      },
+      "test_cases": [
+        {
+          "id": "gear_select_stay_low_slow",
+          "description": "Stay in low gear when speed below upshift threshold",
+          "input": {
+            "current_gear": 0,
+            "speed_m_s": 8.0,
+            "load_fraction": 0.5
+          },
+          "expected": {
+            "target_gear": 0
+          }
+        },
+        {
+          "id": "gear_select_upshift",
+          "description": "Upshift when speed exceeds threshold",
+          "input": {
+            "current_gear": 0,
+            "speed_m_s": 12.0,
+            "load_fraction": 0.5
+          },
+          "expected": {
+            "target_gear": 1
+          }
+        },
+        {
+          "id": "gear_select_stay_high_fast",
+          "description": "Stay in high gear when speed above downshift threshold",
+          "input": {
+            "current_gear": 1,
+            "speed_m_s": 8.0,
+            "load_fraction": 0.5
+          },
+          "expected": {
+            "target_gear": 1
+          }
+        },
+        {
+          "id": "gear_select_downshift",
+          "description": "Downshift when speed drops below threshold",
+          "input": {
+            "current_gear": 1,
+            "speed_m_s": 3.0,
+            "load_fraction": 0.5
+          },
+          "expected": {
+            "target_gear": 0
+          }
+        },
+        {
+          "id": "gear_select_load_hold",
+          "description": "Prevent upshift under high load at low speed",
+          "input": {
+            "current_gear": 0,
+            "speed_m_s": 12.0,
+            "load_fraction": 0.9
+          },
+          "expected": {
+            "target_gear": 0
+          }
+        },
+        {
+          "id": "gear_select_load_allow_high_speed",
+          "description": "Allow upshift under high load at high speed",
+          "input": {
+            "current_gear": 0,
+            "speed_m_s": 18.0,
+            "load_fraction": 0.9
+          },
+          "expected": {
+            "target_gear": 1
+          }
+        },
+        {
+          "id": "gear_select_downshift_priority",
+          "description": "Downshift takes priority over upshift conditions",
+          "input": {
+            "current_gear": 1,
+            "speed_m_s": 2.0,
+            "load_fraction": 0.0
+          },
+          "expected": {
+            "target_gear": 0
           }
         }
       ]

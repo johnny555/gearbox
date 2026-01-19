@@ -16,6 +16,7 @@ import { join } from 'path';
 import { WillisConstraint, GearRatioConstraint } from '../core/constraints';
 import { PlanetaryGearComponent } from '../components/planetary';
 import { VehicleComponent } from '../components/vehicle';
+import { GearShiftSchedule } from '../control/shift-controller';
 
 // Load test vectors from shared file
 interface TestCase {
@@ -29,6 +30,19 @@ interface TestSuite {
   description: string;
   test_cases: TestCase[];
   vehicle_params?: Record<string, number>;
+  schedule_config?: {
+    n_gears: number;
+    upshift_speeds: number[];
+    downshift_speeds: number[];
+    speed_unit?: string;
+    min_gear?: number;
+    max_gear?: number;
+    load_based_hold?: {
+      enabled?: boolean;
+      load_threshold?: number;
+      speed_threshold?: number;
+    };
+  };
 }
 
 interface TestVectors {
@@ -239,6 +253,50 @@ describe('cross-validation (shared test vectors)', () => {
     });
   });
 
+  describe('Gear Selection', () => {
+    it('should match Python for all test cases', () => {
+      const suite = testVectors.test_suites.gear_selection;
+      if (!suite) {
+        console.log('Gear selection test suite not found, skipping');
+        return;
+      }
+
+      const sc = suite.schedule_config!;
+
+      const schedule = new GearShiftSchedule({
+        gearboxId: 'test',
+        nGears: sc.n_gears,
+        upshiftSpeeds: sc.upshift_speeds,
+        downshiftSpeeds: sc.downshift_speeds,
+        speedUnit: (sc.speed_unit ?? 'm/s') as 'm/s' | 'km/h' | 'mph' | 'rad/s',
+        minGear: sc.min_gear ?? 0,
+        maxGear: sc.max_gear,
+        loadBasedHold: sc.load_based_hold ? {
+          enabled: sc.load_based_hold.enabled ?? false,
+          loadThreshold: sc.load_based_hold.load_threshold ?? 0.8,
+          speedThreshold: sc.load_based_hold.speed_threshold ?? 15.0,
+        } : undefined,
+      });
+
+      for (const tc of suite.test_cases) {
+        const { current_gear, speed_m_s, load_fraction } = tc.input;
+        const { target_gear } = tc.expected;
+
+        if (target_gear === null) {
+          throw new Error(`Test case ${tc.id} has null expected value`);
+        }
+
+        const actualTarget = schedule.getTargetGear(
+          current_gear,
+          speed_m_s,
+          load_fraction ?? 0.0
+        );
+
+        expect(actualTarget).toBe(target_gear);
+      }
+    });
+  });
+
   describe('Test Vectors Metadata', () => {
     it('should have valid version', () => {
       expect(testVectors.version).toBeDefined();
@@ -257,6 +315,7 @@ describe('cross-validation (shared test vectors)', () => {
         'gear_ratio',
         'road_load',
         'torque_split',
+        'gear_selection',
       ];
 
       for (const suite of expectedSuites) {
